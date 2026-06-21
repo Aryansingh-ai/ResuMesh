@@ -1,0 +1,95 @@
+groups:
+  - name: resumesh.backend
+    interval: 30s
+    rules:
+      # API is down
+      - alert: BackendDown
+        expr: up{job="resumesh_backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ResuMesh backend is DOWN"
+          description: "The FastAPI backend has been unreachable for more than 1 minute."
+
+      # High 5xx error rate
+      - alert: HighErrorRate
+        expr: |
+          rate(http_requests_total{job="resumesh_backend", status=~"5.."}[5m])
+          / rate(http_requests_total{job="resumesh_backend"}[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High HTTP 5xx error rate (>5%)"
+          description: "Error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+
+      # Slow API responses
+      - alert: SlowAPIResponse
+        expr: |
+          histogram_quantile(0.95,
+            rate(http_request_duration_seconds_bucket{job="resumesh_backend"}[5m])
+          ) > 2.0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 API latency > 2 seconds"
+          description: "95th percentile response time is {{ $value | humanizeDuration }}."
+
+  - name: resumesh.database
+    interval: 60s
+    rules:
+      - alert: PostgresDown
+        expr: up{job="postgres"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL is DOWN"
+
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis is DOWN"
+
+  - name: resumesh.ml
+    interval: 300s
+    rules:
+      # High miss rate on matching (suggests model quality issue)
+      - alert: LowMatchAccuracy
+        expr: |
+          rate(resumesh_match_requests_total{result="low_score"}[1h])
+          / rate(resumesh_match_requests_total[1h]) > 0.7
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "70%+ of match requests are returning low scores"
+          description: "Model may need retraining with fresh feedback data."
+
+  - name: resumesh.system
+    interval: 60s
+    rules:
+      - alert: HighMemoryUsage
+        expr: |
+          (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes)
+          / node_memory_MemTotal_bytes > 0.90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "System memory usage > 90%"
+
+      - alert: HighDiskUsage
+        expr: |
+          (node_filesystem_size_bytes{mountpoint="/"} - node_filesystem_free_bytes{mountpoint="/"})
+          / node_filesystem_size_bytes{mountpoint="/"} > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk usage > 85%"

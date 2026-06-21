@@ -1,0 +1,105 @@
+{
+  "id": null,
+  "uid": "resumesh-main",
+  "title": "ResuMesh — Platform Overview",
+  "tags": ["resumesh", "production"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "API Status",
+      "gridPos": { "x": 0, "y": 0, "w": 3, "h": 3 },
+      "targets": [
+        {
+          "expr": "up{job=\"resumesh_backend\"}",
+          "legendFormat": "API"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "mappings": [
+          { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Requests / min",
+      "gridPos": { "x": 3, "y": 0, "w": 3, "h": 3 },
+      "targets": [
+        {
+          "expr": "rate(http_requests_total{job=\"resumesh_backend\"}[1m]) * 60",
+          "legendFormat": "req/min"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "P95 Latency",
+      "gridPos": { "x": 6, "y": 0, "w": 3, "h": 3 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=\"resumesh_backend\"}[5m]))",
+          "legendFormat": "p95"
+        }
+      ],
+      "options": { "unit": "s" }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Error Rate",
+      "gridPos": { "x": 9, "y": 0, "w": 3, "h": 3 },
+      "targets": [
+        {
+          "expr": "rate(http_requests_total{job=\"resumesh_backend\",status=~\"5..\"}[5m]) / rate(http_requests_total{job=\"resumesh_backend\"}[5m])",
+          "legendFormat": "5xx rate"
+        }
+      ],
+      "options": { "unit": "percentunit" }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Request Rate by Endpoint",
+      "gridPos": { "x": 0, "y": 3, "w": 12, "h": 6 },
+      "targets": [
+        {
+          "expr": "sum by(handler) (rate(http_requests_total{job=\"resumesh_backend\"}[5m]))",
+          "legendFormat": "{{ handler }}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Resumes Uploaded (cumulative)",
+      "gridPos": { "x": 0, "y": 9, "w": 6, "h": 5 },
+      "targets": [
+        {
+          "expr": "resumesh_resume_uploads_total",
+          "legendFormat": "Uploads"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Match Requests",
+      "gridPos": { "x": 6, "y": 9, "w": 6, "h": 5 },
+      "targets": [
+        {
+          "expr": "rate(resumesh_match_requests_total[5m])",
+          "legendFormat": "{{ model_version }}"
+        }
+      ]
+    }
+  ]
+}

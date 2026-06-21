@@ -1,0 +1,59 @@
+stages:
+  ingest:
+    cmd: python ml/ingest.py
+    deps:
+      - ml/ingest.py
+    outs:
+      - data/raw/feedback.json
+      - data/raw/resumes.json
+      - data/raw/jobs.json
+
+  parse:
+    cmd: python ml/parse.py
+    deps:
+      - ml/parse.py
+      - data/raw/feedback.json
+      - data/raw/resumes.json
+      - data/raw/jobs.json
+    outs:
+      - data/processed/training_data.json
+
+  feature_engineering:
+    cmd: python ml/features.py
+    deps:
+      - ml/features.py
+      - data/processed/training_data.json
+    outs:
+      - data/processed/features.npz
+      - data/processed/feature_names.json
+
+  train:
+    cmd: python ml/train.py data/processed/training_data.json models/match_model.pkl
+    deps:
+      - ml/train.py
+      - data/processed/training_data.json
+    outs:
+      - models/match_model.pkl
+    metrics:
+      - ml/metrics.json:
+          cache: false
+
+  evaluate:
+    cmd: python ml/evaluate.py models/match_model.pkl data/processed/training_data.json
+    deps:
+      - ml/evaluate.py
+      - models/match_model.pkl
+      - data/processed/training_data.json
+    metrics:
+      - ml/evaluation_report.json:
+          cache: false
+    plots:
+      - ml/confusion_matrix.json:
+          cache: false
+
+  register:
+    cmd: python ml/register.py models/match_model.pkl
+    deps:
+      - ml/register.py
+      - models/match_model.pkl
+      - ml/evaluation_report.json
