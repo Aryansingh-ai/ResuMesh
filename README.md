@@ -30,23 +30,22 @@
 ## ✨ Features
 
 ### Core Features
-- 🔍 **Automatic Job Detection** — Detects job postings on LinkedIn, Wellfound, Internshala, Naukri
-- 📊 **Resume Match Scoring** — AI-powered compatibility scoring (0–100)
-- 🎯 **Skill Gap Analysis** — Identifies missing skills with priority rankings
-- ✉️ **Cover Letter Generator** — Tailored cover letters using RAG
-- 🤖 **Career Coach** — Conversational AI assistant powered by LangGraph
-- 📈 **Application Tracker** — Full pipeline tracking with analytics
-- 🔄 **Feedback Loop** — Continuously improves through user feedback
+- 🔍 **Automatic Job Detection** — Detects job postings on LinkedIn, Wellfound, Internshala, Naukri.
+- 📊 **Resume Match Scoring** — AI-powered compatibility scoring (0–100) using a two-stage ranking system.
+- 🎯 **Skill Gap Analysis** — Identifies missing skills with priority rankings.
+- ✉️ **Cover Letter Generator** — Tailored cover letters using RAG.
+- 🤖 **Career Coach** — Conversational AI assistant powered by LangGraph.
+- 📈 **Application Tracker** — Full pipeline tracking with analytics.
+- 🔄 **Feedback Loop** — Continuously improves through user feedback.
 
-### Technical Features
-- JWT Authentication with refresh tokens
-- Role-Based Access Control (RBAC)
-- Vector search with ChromaDB
-- MLflow experiment tracking
-- Airflow pipeline orchestration
-- Prometheus + Grafana monitoring
-- DVC data versioning
-- Docker Compose deployment
+### 🛡️ Production Hardening & Security Features
+- 🔑 **Row-Level Security (RLS) & Auth Policies** — Enforces strict data separation on all 12 database tables and the Supabase Storage bucket, using PostgreSQL casted roles (`role::text`) for admin overrides.
+- ⚡ **pgvector HNSW Vector Indexing** — High-performance vector cosine similarity graphs on resumes and jobs, achieving sub-5ms semantic matches across 100,000+ records.
+- 🔒 **FastAPI Tenant Boundary Isolation** — Defense-in-depth API endpoint checks preventing BOLA (Broken Object Level Authorization) and cross-tenant leakage.
+- 🔍 **SHA256 Duplicate Detection** — Captures file hashes on upload to instantly reuse parsed resumes and embeddings, avoiding redundant processing.
+- 📂 **Multi-Version Resume Management** — Tracks incremental versions (V1, V2, V3) per user with automated primary resume promotion.
+- 🗑️ **Soft-Delete Storage Compliance** — Excludes deleted resumes from user interfaces while permanently securing original PDF files in storage for audit compliance.
+- 🧮 **Two-Stage Hybrid Re-Ranking** — Integrates a weighted scoring algorithm: 60% Semantic similarity, 20% Skills match, 10% Experience match, and 10% Education match, returning an explainable score breakdown.
 
 ---
 
@@ -56,13 +55,13 @@
 resumesh/
 ├── frontend/          # React + TypeScript + TailwindCSS SaaS Dashboard
 ├── extension/         # Chrome Extension (Manifest V3)
-├── backend/           # FastAPI REST API
+├── backend/           # FastAPI REST API (Supabase Integration)
 ├── ml/                # ML training pipelines
 ├── airflow/           # Apache Airflow DAGs
 ├── monitoring/        # Prometheus + Grafana configs
 ├── docker/            # Dockerfiles
 ├── docs/              # Documentation
-├── tests/             # Test suites
+├── tests/             # Test suites (including production hardening suite)
 ├── .github/           # CI/CD workflows
 ├── infrastructure/    # Infrastructure as Code
 ├── scripts/           # Utility scripts
@@ -80,15 +79,29 @@ resumesh/
 | Frontend | React 18, TypeScript, TailwindCSS, Vite |
 | Extension | Chrome MV3, React, TypeScript |
 | Backend | Python 3.11, FastAPI, SQLAlchemy |
-| Database | PostgreSQL 15 |
-| Vector DB | ChromaDB |
-| Auth | JWT, bcrypt |
-| ML | Scikit-Learn, Sentence Transformers |
+| Database | Supabase PostgreSQL & Storage |
+| Vector DB | Supabase pgvector (Local SQLite + NumPy fallback for testing) |
+| Auth | Supabase JWT, bcrypt |
+| ML | Scikit-Learn, Sentence Transformers (All-MiniLM-L6-v2) |
 | RAG | LangChain, LangGraph |
 | MLOps | MLflow, DVC, Apache Airflow |
 | Monitoring | Prometheus, Grafana |
 | Containers | Docker, Docker Compose |
 | CI/CD | GitHub Actions |
+
+---
+
+## 📂 Production Engineering Guides & Scripts
+
+Detailed technical design documents and deployment scripts are available in the root workspace:
+
+- 🛡️ **[SECURITY_AUDIT.md](SECURITY_AUDIT.md)** — In-depth analysis of Row-Level Security (RLS) policies, storage bucket rules, FastAPI tenant boundaries, and tenant isolation test cases.
+- ⚡ **[PERFORMANCE_AUDIT.md](PERFORMANCE_AUDIT.md)** — Analysis of pgvector HNSW index configurations, B-Tree indexes, and `EXPLAIN ANALYZE` query plans showing a 67x speedup (84.4ms down to 1.25ms).
+- 🧮 **[MATCHING_ALGORITHM.md](MATCHING_ALGORITHM.md)** — Mathematical breakdown and JSON payloads of the two-stage hybrid re-ranking matching algorithm (60/20/10/10).
+- 🔍 **[DUPLICATE_DETECTION.md](DUPLICATE_DETECTION.md)** — Technical details of SHA256 file hashing, duplicate prevention, and DB/Storage mapping.
+- 📂 **[VERSIONING.md](VERSIONING.md)** — Design of the resume version control system (V1, V2, V3) and primary resume promotion logic.
+- 🗑️ **[STORAGE_RETENTION.md](STORAGE_RETENTION.md)** — Architecture of the soft-delete strategy, storage file retention, and administrator purge endpoints.
+- 📝 **[supabase_rls_migration.sql](supabase_rls_migration.sql)** — The production-ready SQL DDL script to enable RLS and deploy all policies on a Supabase PostgreSQL instance.
 
 ---
 
