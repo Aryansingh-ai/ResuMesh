@@ -1,7 +1,9 @@
 """
-Authentication endpoints — register, login, refresh, logout.
+Authentication endpoints — register, login, refresh, logout using Supabase Auth.
 """
 
+import uuid
+import httpx
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,13 +11,9 @@ from pydantic import BaseModel, EmailStr, field_validator
 import structlog
 
 from app.core.database import get_db
-from app.core.security import (
-    hash_password, verify_password, create_access_token,
-    create_refresh_token, decode_token, get_current_user,
-)
-from app.models.user import User
-from app.models.cover_letter import AuditLog
-from app.services.user_service import UserService
+from app.core.security import get_current_user
+from app.core.config import settings
+from app.models.postgres_models import User
 
 router = APIRouter()
 logger = structlog.get_logger(__name__)
@@ -64,127 +62,174 @@ class TokenResponse(BaseModel):
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-async def register(body: RegisterRequest, request: Request, db: AsyncSession = Depends(get_db)):
-    """Register a new user account."""
-    user_service = UserService(db)
-
-    # Check if email exists
-    existing = await user_service.get_by_email(body.email)
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="An account with this email already exists.",
+async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
+    """Register a new user account via Supabase Auth GoTrue."""
+    async with httpx.AsyncClient() as client:
+        headers = {"apiKey": settings.SUPABASE_ANON_KEY, "Content-Type": "application/json"}
+        signup_data = {
+            "email": body.email,
+            "password": body.password,
+            "data": {"full_name": body.full_name}
+        }
+        resp = await client.post(
+            f"{settings.SUPABASE_URL}/auth/v1/signup",
+            json=signup_data,
+            headers=headers
         )
+        if resp.status_code != 200:
+            raise HTTPException(
+                status_code=resp.status_code,
+                detail=resp.json().get("msg", "Registration failed via Supabase Auth.")
+            )
+        
+        resp_data = resp.json()
+        user_info = resp_data.get("user", {})
+        user_id = user_info.get("id")
+        
+        session = resp_data.get("session")
+        if not session:
+            # If autologin didn't trigger immediately, log in to get session
+            login_resp = await client.post(
+                f"{settings.SUPABASE_URL}/auth/v1/token?grant_type=password",
+                json={"email": body.email, "password": body.password},
+                headers=headers
+            )
+            if login_resp.status_code == 200:
+                session = login_resp.json()
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Registration succeeded, but verification is required."
+                )
 
-    # Create user
-    user = User(
-        email=body.email.lower(),
-        hashed_password=hash_password(body.password),
-        full_name=body.full_name,
-    )
-    db.add(user)
-    await db.flush()
+        access_token = session["access_token"]
+        refresh_token = session["refresh_token"]
 
-    # Audit log
-    db.add(AuditLog(
-        user_id=user.id,
-        action="user.register",
-        ip_address=request.client.host if request.client else None,
-        user_agent=request.headers.get("user-agent"),
-        success=True,
-    ))
+        # Sync user in public PostgreSQL database
+        from sqlalchemy import select
+        res = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
+        user = res.scalar_one_or_none()
+        if not user:
+            user = User(
+                id=uuid.UUID(user_id),
+                email=body.email,
+                full_name=body.full_name,
+                role="user",
+                is_active=True,
+                is_verified=True
+            )
+            db.add(user)
+            await db.commit()
+            await db.refresh(user)
 
-    await db.commit()
-    await db.refresh(user)
-
-    access_token = create_access_token({"sub": str(user.id), "email": user.email})
-    refresh_token = create_refresh_token({"sub": str(user.id)})
-
-    logger.info("User registered", user_id=str(user.id), email=user.email)
-
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        user_id=str(user.id),
-        email=user.email,
-        full_name=user.full_name,
-        role=user.role,
-    )
+        logger.info("User registered via Supabase Auth", user_id=user_id)
+        return TokenResponse(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            user_id=user_id,
+            email=body.email,
+            full_name=body.full_name,
+            role="user"
+        )
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(body: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
-    """Authenticate user and return tokens."""
-    user_service = UserService(db)
-
-    user = await user_service.get_by_email(body.email.lower())
-    if not user or not verify_password(body.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password.",
+async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
+    """Authenticate user with Supabase Auth password grant and return session."""
+    async with httpx.AsyncClient() as client:
+        headers = {"apiKey": settings.SUPABASE_ANON_KEY, "Content-Type": "application/json"}
+        login_data = {
+            "email": body.email,
+            "password": body.password
+        }
+        resp = await client.post(
+            f"{settings.SUPABASE_URL}/auth/v1/token?grant_type=password",
+            json=login_data,
+            headers=headers
         )
+        if resp.status_code != 200:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=resp.json().get("error_description", "Invalid email or password.")
+            )
+        
+        resp_data = resp.json()
+        access_token = resp_data["access_token"]
+        refresh_token = resp_data["refresh_token"]
+        user_info = resp_data["user"]
+        user_id = user_info["id"]
+        email = user_info["email"]
+        full_name = user_info.get("user_metadata", {}).get("full_name", "Supabase User")
 
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is disabled. Contact support.",
+        # Sync user in public PostgreSQL database
+        from sqlalchemy import select
+        res = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
+        user = res.scalar_one_or_none()
+        if not user:
+            user = User(
+                id=uuid.UUID(user_id),
+                email=email,
+                full_name=full_name,
+                role="user",
+                is_active=True,
+                is_verified=True
+            )
+            db.add(user)
+            await db.commit()
+            await db.refresh(user)
+
+        logger.info("User logged in via Supabase Auth", user_id=user_id)
+        return TokenResponse(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            user_id=user_id,
+            email=email,
+            full_name=full_name,
+            role=user.role
         )
-
-    # Update last login
-    user.last_login_at = datetime.now(timezone.utc)
-
-    db.add(AuditLog(
-        user_id=user.id,
-        action="user.login",
-        ip_address=request.client.host if request.client else None,
-        user_agent=request.headers.get("user-agent"),
-        success=True,
-    ))
-
-    await db.commit()
-
-    access_token = create_access_token({"sub": str(user.id), "email": user.email})
-    refresh_token = create_refresh_token({"sub": str(user.id)})
-
-    logger.info("User logged in", user_id=str(user.id))
-
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        user_id=str(user.id),
-        email=user.email,
-        full_name=user.full_name,
-        role=user.role,
-    )
 
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
-    """Issue a new access token using a valid refresh token."""
-    payload = decode_token(body.refresh_token)
-
-    if payload.get("type") != "refresh":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token type. Expected refresh token.",
+    """Refresh session token via Supabase Auth GoTrue."""
+    async with httpx.AsyncClient() as client:
+        headers = {"apiKey": settings.SUPABASE_ANON_KEY, "Content-Type": "application/json"}
+        refresh_data = {
+            "refresh_token": body.refresh_token
+        }
+        resp = await client.post(
+            f"{settings.SUPABASE_URL}/auth/v1/token?grant_type=refresh_token",
+            json=refresh_data,
+            headers=headers
         )
+        if resp.status_code != 200:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired refresh token."
+            )
+        
+        resp_data = resp.json()
+        access_token = resp_data["access_token"]
+        new_refresh_token = resp_data["refresh_token"]
+        user_info = resp_data["user"]
+        user_id = user_info["id"]
+        email = user_info["email"]
+        full_name = user_info.get("user_metadata", {}).get("full_name", "Supabase User")
 
-    user_service = UserService(db)
-    user = await user_service.get_by_id(payload["sub"])
-    if not user or not user.is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        # Fetch synced user role
+        from sqlalchemy import select
+        res = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
+        user = res.scalar_one_or_none()
+        role = user.role if user else "user"
 
-    access_token = create_access_token({"sub": str(user.id), "email": user.email})
-    new_refresh_token = create_refresh_token({"sub": str(user.id)})
-
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=new_refresh_token,
-        user_id=str(user.id),
-        email=user.email,
-        full_name=user.full_name,
-        role=user.role,
-    )
+        return TokenResponse(
+            access_token=access_token,
+            refresh_token=new_refresh_token,
+            user_id=user_id,
+            email=email,
+            full_name=full_name,
+            role=role
+        )
 
 
 @router.get("/me")

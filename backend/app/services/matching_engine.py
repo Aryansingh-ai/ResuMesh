@@ -72,11 +72,45 @@ class MatchingEngine:
             except Exception as e:
                 logger.warning("Embedding similarity failed, using keyword only", error=str(e))
 
+        # Retrieve subscores from helper methods
+        exp_score = self._compute_experience_score(parsed_resume, job_description)
+        edu_score = self._compute_education_score(parsed_resume, job_description)
+
+        # Flatten resume skills
+        resume_skills_dict = parsed_resume.get("skills", {})
+        resume_skills: List[str] = []
+        if isinstance(resume_skills_dict, dict):
+            for skills_list in resume_skills_dict.values():
+                if isinstance(skills_list, list):
+                    resume_skills.extend([s.lower() for s in skills_list if s])
+        elif isinstance(resume_skills_dict, list):
+            resume_skills.extend([s.lower() for s in resume_skills_dict if s])
+        elif isinstance(resume_skills_dict, str):
+            resume_skills.extend([s.strip().lower() for s in resume_skills_dict.split(",") if s])
+        resume_skills_set = set(resume_skills)
+
+        required_skills = [s.lower() for s in (job_description.get("required_skills") or [])]
+        preferred_skills = [s.lower() for s in (job_description.get("preferred_skills") or [])]
+
+        matched_req = [s for s in required_skills if s in resume_skills_set]
+        matched_pref = [s for s in preferred_skills if s in resume_skills_set]
+
+        if required_skills:
+            req_coverage = len(matched_req) / len(required_skills)
+            pref_coverage = len(matched_pref) / max(len(preferred_skills), 1)
+            skill_score = (req_coverage * 0.8 + pref_coverage * 0.2) * 100.0
+        elif not required_skills and not preferred_skills:
+            skill_score = 75.0
+        else:
+            skill_score = 50.0
+
         # Combine scores
         if v2_score is not None:
-            final_score = 0.4 * v1_result["score"] + 0.6 * (v2_score * 100)
+            embedding_score = round(min(max(float(v2_score) * 100.0, 0.0), 100.0), 1)
+            final_score = 0.60 * embedding_score + 0.20 * skill_score + 0.10 * exp_score + 0.10 * edu_score
             model_version = "v2_hybrid"
         else:
+            embedding_score = 0.0
             final_score = v1_result["score"]
             model_version = "v1_keyword"
 
@@ -95,11 +129,17 @@ class MatchingEngine:
                 job_description,
             ),
             details={
+                "final_score": final_score,
+                "embedding_score": embedding_score,
+                "skill_score": round(skill_score, 1),
+                "experience_score": round(exp_score, 1),
+                "education_score": round(edu_score, 1),
+                "skills_match": round(skill_score, 1),
+                "semantic_match": embedding_score,
+                "experience_match": round(exp_score, 1),
+                "education_match": round(edu_score, 1),
                 "keyword_score": v1_result["score"],
-                "embedding_score": v2_score,
                 "skill_coverage": v1_result["skill_coverage"],
-                "experience_match": v1_result["experience_match"],
-                "education_match": v1_result["education_match"],
             },
             model_version=model_version,
         )

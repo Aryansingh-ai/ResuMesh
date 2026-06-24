@@ -2,6 +2,8 @@
 JWT Authentication utilities — token creation, validation, and refresh.
 """
 
+import uuid
+import httpx
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 import structlog
@@ -52,14 +54,12 @@ def create_refresh_token(data: Dict[str, Any]) -> str:
 
 
 def decode_token(token: str) -> Dict[str, Any]:
-    """Decode and validate a JWT token. Raises HTTPException on failure."""
+    """Decode token locally without signature validation (GoTrue handles validation)."""
     try:
-        payload = jwt.decode(
-            token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
-        )
+        payload = jwt.get_unverified_claims(token)
         return payload
-    except JWTError as e:
-        logger.warning("JWT decode failed", error=str(e))
+    except Exception as e:
+        logger.warning("Unverified JWT decode failed", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
@@ -71,32 +71,56 @@ async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncSession = Depends(get_db),
 ):
-    """FastAPI dependency to get the currently authenticated user."""
-    from app.services.user_service import UserService
+    """FastAPI dependency to validate Supabase Auth JWT and return the synced User."""
+    token = credentials.credentials
+    async with httpx.AsyncClient() as client:
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "apiKey": settings.SUPABASE_ANON_KEY
+        }
+        try:
+            response = await client.get(
+                f"{settings.SUPABASE_URL}/auth/v1/user",
+                headers=headers
+            )
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid Supabase JWT token"
+                )
+            user_data = response.json()
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("Failed to validate token with Supabase GoTrue", error=str(e))
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication server connection error"
+            )
 
-    payload = decode_token(credentials.credentials)
+    user_id = user_data.get("id")
+    email = user_data.get("email")
+    metadata = user_data.get("user_metadata", {})
+    full_name = metadata.get("full_name", "Supabase User")
 
-    token_type = payload.get("type")
-    if token_type != "access":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token type",
-        )
-
-    user_id: Optional[str] = payload.get("sub")
-    if user_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token payload",
-        )
-
-    user_service = UserService(db)
-    user = await user_service.get_by_id(user_id)
+    from app.models.postgres_models import User
+    from sqlalchemy import select
+    
+    result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
+    user = result.scalar_one_or_none()
+    
     if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
+        user = User(
+            id=uuid.UUID(user_id),
+            email=email,
+            full_name=full_name,
+            role="user",
+            is_active=True,
+            is_verified=True
         )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
 
     if not user.is_active:
         raise HTTPException(

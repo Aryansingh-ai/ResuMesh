@@ -86,6 +86,11 @@ export default function ResumeManagerPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['resumes'],
     queryFn: () => api.get('/resumes/').then((r) => r.data),
+    refetchInterval: (query) => {
+      const items = query?.state?.data?.items || [];
+      const hasUnparsed = items.some((r: any) => !r.is_parsed);
+      return hasUnparsed ? 2000 : false;
+    },
   });
 
   const uploadMutation = useMutation({

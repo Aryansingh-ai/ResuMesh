@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Briefcase, Target, CheckCircle, XCircle, Lightbulb, Send, ExternalLink } from 'lucide-react';
@@ -6,6 +6,73 @@ import api from '@/lib/api';
 import clsx from 'clsx';
 
 const PORTALS = ['linkedin', 'wellfound', 'internshala', 'naukri', 'manual'];
+
+const getScoreReasons = (score: number, details: any) => {
+  if (!details) return [];
+  const reasons: string[] = [];
+  const isHigh = score >= 80;
+
+  const skillCoverage = details.skill_coverage ?? 0;
+  if (isHigh) {
+    if (skillCoverage >= 70) {
+      reasons.push(`Strong skill match: You have ${Math.round(skillCoverage)}% of required skills.`);
+    } else {
+      reasons.push(`Partial skill match: You have ${Math.round(skillCoverage)}% of the skills, with other factors boosting your score.`);
+    }
+  } else {
+    if (skillCoverage < 50) {
+      reasons.push(`Low skill overlap: You are missing ${Math.round(100 - skillCoverage)}% of key skills.`);
+    } else {
+      reasons.push(`Moderate skill overlap: You have ${Math.round(skillCoverage)}% of required skills, but there are gaps.`);
+    }
+  }
+
+  const expMatch = details.experience_match ?? 0;
+  if (isHigh) {
+    if (expMatch >= 90) {
+      reasons.push(`Solid experience: Your professional experience matches or exceeds the requirements.`);
+    }
+  } else {
+    if (expMatch < 50) {
+      reasons.push(`Experience gap: Your years of experience do not meet the minimum requirement.`);
+    } else if (expMatch < 80) {
+      reasons.push(`Partial experience: Your background meets only some of the experience criteria.`);
+    }
+  }
+
+  const eduMatch = details.education_match ?? 0;
+  if (isHigh) {
+    if (eduMatch >= 90) {
+      reasons.push(`Education aligned: Your degree background perfectly matches requirements.`);
+    }
+  } else {
+    if (eduMatch < 70) {
+      reasons.push(`Education gap: Your educational credentials do not fully align with requirements.`);
+    }
+  }
+
+  if (details.embedding_score != null) {
+    const semScore = Math.round(details.embedding_score * 100);
+    if (isHigh) {
+      if (semScore >= 60) {
+        reasons.push(`Contextual match: High semantic relevance between your resume text and the job description.`);
+      }
+    } else {
+      if (semScore < 40) {
+        reasons.push(`Low contextual match: The overall focus of your resume doesn't strongly relate to this job.`);
+      }
+    }
+  }
+
+  if (reasons.length === 0) {
+    if (isHigh) {
+      reasons.push(`Good overall fit: Your combined profile matches the position requirements well.`);
+    } else {
+      reasons.push(`Profile mismatch: Minor gaps in skill alignment and required experience.`);
+    }
+  }
+  return reasons;
+};
 
 export default function JobAnalysisPage() {
   const [form, setForm] = useState({
@@ -15,6 +82,7 @@ export default function JobAnalysisPage() {
   const [matchResult, setMatchResult] = useState<any>(null);
   const [analyzedJobId, setAnalyzedJobId] = useState<string | null>(null);
   const [step, setStep] = useState<'form' | 'results'>('form');
+  const [selectedResumeId, setSelectedResumeId] = useState<string>('');
 
   const { data: resumes } = useQuery({
     queryKey: ['resumes'],
@@ -23,6 +91,13 @@ export default function JobAnalysisPage() {
 
   const primaryResume = resumes?.items?.find((r: any) => r.is_primary) || resumes?.items?.[0];
 
+  useEffect(() => {
+    if (resumes?.items?.length > 0 && !selectedResumeId) {
+      const primary = resumes.items.find((r: any) => r.is_primary) || resumes.items[0];
+      setSelectedResumeId(primary.id);
+    }
+  }, [resumes, selectedResumeId]);
+
   const analyzeMutation = useMutation({
     mutationFn: async () => {
       // 1. Analyze the job
@@ -30,9 +105,10 @@ export default function JobAnalysisPage() {
       setAnalyzedJobId(jobRes.data.id);
 
       // 2. Get match score if resume exists
-      if (primaryResume?.id) {
+      const resumeIdToUse = selectedResumeId || primaryResume?.id;
+      if (resumeIdToUse) {
         const matchRes = await api.post('/matching/score', {
-          resume_id: primaryResume.id,
+          resume_id: resumeIdToUse,
           job_id: jobRes.data.id,
           save_to_application: true,
         });
@@ -103,7 +179,7 @@ export default function JobAnalysisPage() {
                 <label className="label">Portal</label>
                 <select className="input" value={form.portal} onChange={(e) => setForm({ ...form, portal: e.target.value })}>
                   {PORTALS.map((p) => (
-                    <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
+                    <option key={p} value={p} className="bg-slate-900 text-white">{p.charAt(0).toUpperCase() + p.slice(1)}</option>
                   ))}
                 </select>
               </div>
@@ -122,10 +198,23 @@ export default function JobAnalysisPage() {
               </div>
             )}
 
-            {primaryResume && (
-              <div className="bg-green-900/20 border border-green-800/30 rounded-lg p-3 text-xs text-green-400 flex items-center gap-2">
-                <CheckCircle size={14} className="flex-shrink-0" />
-                Using <strong className="text-green-300">{primaryResume.title}</strong> for matching
+            {resumes?.items && resumes.items.length > 0 && (
+              <div className="bg-green-900/20 border border-green-800/30 rounded-lg p-3 text-xs text-green-400 space-y-2">
+                <div className="flex items-center gap-2">
+                  <CheckCircle size={14} className="flex-shrink-0" />
+                  <span>Select resume for matching:</span>
+                </div>
+                <select
+                  value={selectedResumeId}
+                  onChange={(e) => setSelectedResumeId(e.target.value)}
+                  className="input py-1.5 text-xs bg-slate-900 text-white border-dark-600 focus:border-brand-500 w-full"
+                >
+                  {resumes.items.map((r: any) => (
+                    <option key={r.id} value={r.id} className="bg-slate-900 text-white">
+                      {r.title} ({r.file_name}){r.is_primary ? ' [Primary]' : ''}
+                    </option>
+                  ))}
+                </select>
               </div>
             )}
           </div>
@@ -163,21 +252,47 @@ export default function JobAnalysisPage() {
           <button onClick={() => setStep('form')} className="btn-ghost text-sm">← Analyze Another Job</button>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Score */}
-            <div className="card p-6 text-center">
-              <div className="text-sm text-slate-400 mb-2 uppercase tracking-wider">Match Score</div>
-              {matchResult?.score != null ? (
-                <>
-                  <div className={`text-6xl font-black ${scoreColor(matchResult.score)}`}>
-                    {Math.round(matchResult.score)}%
-                  </div>
-                  <div className={`text-sm mt-2 font-medium ${scoreColor(matchResult.score)}`}>
-                    {scoreLabel(matchResult.score)}
-                  </div>
-                  <div className="text-xs text-slate-500 mt-1">Model: {matchResult.model_version}</div>
-                </>
-              ) : (
-                <div className="text-slate-500 text-sm">Upload a resume to see your score</div>
+            {/* Left Column (Score + Explanation) */}
+            <div className="space-y-6">
+              {/* Score Card */}
+              <div className="card p-6 text-center">
+                <div className="text-sm text-slate-400 mb-2 uppercase tracking-wider">Match Score</div>
+                {matchResult?.score != null ? (
+                  <>
+                    <div className={`text-6xl font-black ${scoreColor(matchResult.score)}`}>
+                      {Math.round(matchResult.score)}%
+                    </div>
+                    <div className={`text-sm mt-2 font-medium ${scoreColor(matchResult.score)}`}>
+                      {scoreLabel(matchResult.score)}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">Model: {matchResult.model_version}</div>
+                  </>
+                ) : (
+                  <div className="text-slate-500 text-sm">Upload a resume to see your score</div>
+                )}
+              </div>
+
+              {/* Explanation Card */}
+              {matchResult?.score != null && (
+                <div className="card p-5 text-left space-y-3">
+                  <h3 className={clsx(
+                    'text-sm font-semibold flex items-center gap-2',
+                    matchResult.score >= 80 ? 'text-green-400' : 'text-yellow-500'
+                  )}>
+                    {matchResult.score >= 80 ? 'Why the score is high' : 'Why the score is low'}
+                  </h3>
+                  <ul className="space-y-2">
+                    {getScoreReasons(matchResult.score, matchResult.details).map((reason: string, i: number) => (
+                      <li key={i} className="text-xs text-slate-300 flex items-start gap-2">
+                        <span className={clsx(
+                          'w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0',
+                          matchResult.score >= 80 ? 'bg-green-400' : 'bg-yellow-500'
+                        )} />
+                        <span>{reason}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
             </div>
 

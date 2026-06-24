@@ -62,6 +62,7 @@ async def _index_job_background(job_id: str, text: str) -> None:
 
 
 @router.post("/analyze", status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED)
 async def analyze_job(
     body: JobAnalyzeRequest,
     background_tasks: BackgroundTasks,
@@ -214,4 +215,63 @@ async def get_job(
             "min_years_experience": description.min_years_experience,
             "max_years_experience": description.max_years_experience,
         } if description else None,
+    }
+
+
+@router.post("/{job_id}/match")
+async def match_job(
+    job_id: str,
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Trigger similarity matching for a job against all resumes and return top candidates.
+    """
+    result = await db.execute(select(Job).where(Job.id == uuid.UUID(job_id)))
+    job = result.scalar_one_or_none()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job.embedding is None:
+        embedding_service = get_embedding_service()
+        try:
+            job.embedding = await embedding_service.encode(job.raw_description)
+            await db.commit()
+        except Exception as e:
+            logger.error("Failed to generate job embedding for matching", job_id=job_id, error=str(e))
+            raise HTTPException(status_code=500, detail="Failed to generate job embedding")
+
+    from app.services.matching_service import MatchingService
+    matching_service = MatchingService(db)
+    candidates = await matching_service.find_top_candidates(job_id, limit=limit)
+    return {
+        "job_id": job_id,
+        "candidates": candidates,
+        "total": len(candidates)
+    }
+
+
+@router.get("/{job_id}/candidates")
+async def get_job_candidates(
+    job_id: str,
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get top candidates for a job description.
+    """
+    result = await db.execute(select(Job).where(Job.id == uuid.UUID(job_id)))
+    job = result.scalar_one_or_none()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    from app.services.matching_service import MatchingService
+    matching_service = MatchingService(db)
+    candidates = await matching_service.find_top_candidates(job_id, limit=limit)
+    return {
+        "job_id": job_id,
+        "candidates": candidates,
+        "total": len(candidates)
     }

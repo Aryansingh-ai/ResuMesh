@@ -156,7 +156,9 @@ export default function ApplicationTrackerPage() {
                   )}
                 >
                   {STATUSES.map((s) => (
-                    <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
+                    <option key={s} value={s} className="bg-slate-900 text-white">
+                      {STATUS_CONFIG[s].label}
+                    </option>
                   ))}
                 </select>
 

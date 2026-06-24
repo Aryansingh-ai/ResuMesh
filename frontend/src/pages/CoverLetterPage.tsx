@@ -71,9 +71,9 @@ export default function CoverLetterPage() {
           <div>
             <label className="label">Select Resume</label>
             <select className="input" value={selectedResume} onChange={(e) => setSelectedResume(e.target.value)}>
-              <option value="">— Choose resume —</option>
+              <option value="" className="bg-slate-900 text-white">— Choose resume —</option>
               {resumes.map((r: any) => (
-                <option key={r.id} value={r.id}>{r.title} {r.is_primary ? '(Primary)' : ''}</option>
+                <option key={r.id} value={r.id} className="bg-slate-900 text-white">{r.title} {r.is_primary ? '(Primary)' : ''}</option>
               ))}
             </select>
             {resumes.length === 0 && (
@@ -84,9 +84,9 @@ export default function CoverLetterPage() {
           <div>
             <label className="label">Select Job</label>
             <select className="input" value={selectedJob} onChange={(e) => setSelectedJob(e.target.value)}>
-              <option value="">— Choose analyzed job —</option>
+              <option value="" className="bg-slate-900 text-white">— Choose analyzed job —</option>
               {jobs.map((j: any) => (
-                <option key={j.id} value={j.id}>{j.title} @ {j.company}</option>
+                <option key={j.id} value={j.id} className="bg-slate-900 text-white">{j.title} @ {j.company}</option>
               ))}
             </select>
             {jobs.length === 0 && (

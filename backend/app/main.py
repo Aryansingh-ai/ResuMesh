@@ -3,15 +3,17 @@ ResuMesh FastAPI Application Entry Point
 """
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 import structlog
 import time
 
 from app.core.config import settings
-from app.core.database import init_db, close_db
+from app.core.database import init_db, close_db, get_db
 from app.core.logging_config import setup_logging
 from app.core.metrics import setup_metrics
 from app.api.v1.router import api_router
@@ -31,8 +33,18 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("Database initialized")
 
-    setup_metrics(app)
-    logger.info("Metrics configured")
+    try:
+        from app.services.supabase_storage import get_storage_service
+        await get_storage_service().initialize_bucket("resumes")
+    except Exception as e:
+        logger.warning("Failed to initialize Supabase storage bucket during startup.", error=str(e))
+
+    try:
+        from app.services.embedding_service import get_embedding_service
+        await get_embedding_service().initialize()
+        logger.info("Embedding service initialized")
+    except Exception as e:
+        logger.warning("Failed to initialize embedding service during startup. App will run in degraded mode.", error=str(e))
 
     logger.info("ResuMesh API ready", host=settings.BACKEND_HOST, port=settings.BACKEND_PORT)
     yield
@@ -71,6 +83,9 @@ def create_application() -> FastAPI:
     app.add_middleware(RateLimitMiddleware)
     app.add_middleware(RequestLoggerMiddleware)
 
+    # ── Metrics Setup (must run before application starts) ──────────────────
+    setup_metrics(app)
+
     # ── Routers ─────────────────────────────────────────────────────────────
     app.include_router(api_router, prefix="/api/v1")
 
@@ -95,9 +110,19 @@ def create_application() -> FastAPI:
 
     # ── Health Endpoints ────────────────────────────────────────────────────
     @app.get("/health", tags=["System"])
-    async def health_check():
+    async def health_check(db: AsyncSession = Depends(get_db)):
+        database_status = "connected"
+        overall_status = "healthy"
+        try:
+            await db.execute(text("SELECT 1"))
+        except Exception as e:
+            logger.error("Database health check failed", error=str(e))
+            database_status = "disconnected"
+            overall_status = "unhealthy"
+
         return {
-            "status": "healthy",
+            "status": overall_status,
+            "database": database_status,
             "app": settings.APP_NAME,
             "version": settings.APP_VERSION,
             "env": settings.APP_ENV,

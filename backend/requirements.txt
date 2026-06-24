@@ -33,7 +33,7 @@ chromadb==0.5.0
 # RAG / LangChain
 langchain==0.2.5
 langchain-community==0.2.5
-langchain-core==0.2.10
+langchain-core==0.2.20
 langgraph==0.1.5
 langchain-groq==0.1.6
 langchain-google-genai==1.0.7

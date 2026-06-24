@@ -4,7 +4,7 @@ All settings loaded from environment variables with sensible defaults.
 """
 
 from functools import lru_cache
-from typing import List
+from typing import List, Any
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import AnyHttpUrl, field_validator
 
@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     BACKEND_PORT: int = 8000
     BACKEND_WORKERS: int = 4
 
-    ALLOWED_ORIGINS: List[str] = [
+    ALLOWED_ORIGINS: Any = [
         "http://localhost:3000",
         "http://localhost:5173",
     ]
@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     # ── Database ─────────────────────────────────────────────────────────────
     DATABASE_URL: str = "postgresql+asyncpg://resumesh_user:resumesh_password@localhost:5432/resumesh"
     REDIS_URL: str = "redis://localhost:6379/0"
+
+    # ── Supabase ─────────────────────────────────────────────────────────────
+    SUPABASE_URL: str = ""
+    SUPABASE_ANON_KEY: str = ""
+    SUPABASE_SERVICE_ROLE_KEY: str = ""
 
     # ── JWT ──────────────────────────────────────────────────────────────────
     JWT_SECRET_KEY: str = "jwt-secret-change-me"
@@ -75,7 +80,7 @@ class Settings(BaseSettings):
     # ── File Storage ──────────────────────────────────────────────────────────
     UPLOAD_DIR: str = "./uploads"
     MAX_FILE_SIZE_MB: int = 10
-    ALLOWED_EXTENSIONS: List[str] = ["pdf", "docx"]
+    ALLOWED_EXTENSIONS: Any = ["pdf", "docx"]
 
     @field_validator("ALLOWED_EXTENSIONS", mode="before")
     @classmethod

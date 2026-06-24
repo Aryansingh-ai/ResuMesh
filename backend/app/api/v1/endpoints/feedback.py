@@ -47,7 +47,7 @@ async def submit_feedback(
         feedback_type=body.feedback_type,
         rating=body.rating,
         comment=body.comment,
-        metadata=body.metadata,
+        meta_data=body.metadata,
     )
     db.add(feedback)
     await db.commit()
