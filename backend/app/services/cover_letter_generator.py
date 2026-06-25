@@ -37,18 +37,59 @@ Under 400 words. Use technical terminology naturally.""",
 }
 
 
-def _get_llm():
-    """Get configured LLM."""
-    provider = settings.LLM_PROVIDER.lower()
-    if provider == "groq" and settings.GROQ_API_KEY:
+def _get_llm(provider: Optional[str] = None, api_key: Optional[str] = None, model: Optional[str] = None):
+    """Get configured LLM — uses request-level override if provided, falls back to settings."""
+    from app.core.config import settings
+    provider = (provider or settings.LLM_PROVIDER).lower()
+    api_key = api_key or ""
+
+    if provider == "groq":
+        key = api_key or settings.GROQ_API_KEY
+        if not key:
+            raise ValueError("Groq API key not configured. Add it in Settings.")
         from langchain_groq import ChatGroq
-        return ChatGroq(model="llama-3.1-8b-instant", api_key=settings.GROQ_API_KEY, temperature=0.8)
-    elif provider == "gemini" and settings.GOOGLE_API_KEY:
+        return ChatGroq(model=model or "llama-3.1-8b-instant", api_key=key, temperature=0.8)
+
+    elif provider == "gemini":
+        key = api_key or settings.GOOGLE_API_KEY
+        if not key:
+            raise ValueError("Google API key not configured. Add it in Settings.")
         from langchain_google_genai import ChatGoogleGenerativeAI
-        return ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=settings.GOOGLE_API_KEY, temperature=0.8)
+        return ChatGoogleGenerativeAI(model=model or "gemini-1.5-flash", google_api_key=key, temperature=0.8)
+
+    elif provider == "openai":
+        if not api_key:
+            raise ValueError("OpenAI API key required. Add it in Settings.")
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(model=model or "gpt-4o-mini", api_key=api_key, temperature=0.8)
+
+    elif provider == "deepseek":
+        if not api_key:
+            raise ValueError("DeepSeek API key required. Add it in Settings.")
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(
+            model=model or "deepseek-chat",
+            api_key=api_key,
+            base_url="https://api.deepseek.com/v1",
+            temperature=0.8,
+        )
+
+    elif provider == "openrouter":
+        if not api_key:
+            raise ValueError("OpenRouter API key required. Add it in Settings.")
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(
+            model=model or "openai/gpt-4o-mini",
+            api_key=api_key,
+            base_url="https://openrouter.ai/api/v1",
+            temperature=0.8,
+        )
+
     else:
+        # Default: Ollama (self-hosted)
         from langchain_ollama import ChatOllama
-        return ChatOllama(model=settings.OLLAMA_MODEL, base_url=settings.OLLAMA_BASE_URL, temperature=0.8)
+        return ChatOllama(model=model or settings.OLLAMA_MODEL, base_url=settings.OLLAMA_BASE_URL, temperature=0.8)
+
 
 
 class CoverLetterGenerator:
@@ -60,6 +101,9 @@ class CoverLetterGenerator:
         job_data: dict,
         tone: str = "professional",
         additional_context: str = "",
+        llm_provider: Optional[str] = None,
+        llm_api_key: Optional[str] = None,
+        llm_model: Optional[str] = None,
     ) -> str:
         """
         Generate a tailored cover letter.
@@ -69,12 +113,16 @@ class CoverLetterGenerator:
             job_data: Structured job information dictionary.
             tone: Template tone ('professional', 'enthusiastic', 'technical').
             additional_context: Any extra user notes or instructions.
+            llm_provider: Optional override for LLM provider (from request headers).
+            llm_api_key: Optional override for LLM API key (from request headers).
+            llm_model: Optional override for LLM model name (from request headers).
 
         Returns:
             Generated cover letter text.
         """
         template = COVER_LETTER_TEMPLATES.get(tone, COVER_LETTER_TEMPLATES["professional"])
-        llm = _get_llm()
+        llm = _get_llm(provider=llm_provider, api_key=llm_api_key, model=llm_model)
+
 
         # Build context
         skills = resume_data.get("skills", {})

@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Mail, Zap, Copy, Download, CheckCircle } from 'lucide-react';
+import { Mail, Zap, Copy, CheckCircle } from 'lucide-react';
 import api from '@/lib/api';
 import clsx from 'clsx';
+import { getLLMHeaders } from './SettingsPage';
 
 const TONES = [
   { id: 'professional', label: 'Professional', emoji: '👔' },
@@ -41,8 +42,12 @@ export default function CoverLetterPage() {
       tone,
       additional_context: additionalContext,
       save: true,
-    }).then((r) => r.data),
+    }, { headers: getLLMHeaders() }).then((r) => r.data),
     onSuccess: (data) => setGeneratedLetter(data.content),
+    onError: (err: any) => {
+      const msg = err.response?.data?.detail || 'Generation failed. Check your LLM settings.';
+      alert(msg);
+    },
   });
 
   const handleCopy = () => {

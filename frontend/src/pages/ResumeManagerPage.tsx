@@ -119,6 +119,43 @@ export default function ResumeManagerPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['resumes'] }),
   });
 
+  const setPrimaryMutation = useMutation({
+    mutationFn: (id: string) => api.post(`/resumes/${id}/primary`),
+
+    // Optimistically update the cache BEFORE the API call completes
+    onMutate: async (id: string) => {
+      // Cancel any outgoing refetches so they don't overwrite our optimistic update
+      await queryClient.cancelQueries({ queryKey: ['resumes'] });
+
+      // Snapshot current data for rollback
+      const previous = queryClient.getQueryData(['resumes']);
+
+      // Immediately update the cache: set is_primary on clicked item, unset others
+      queryClient.setQueryData(['resumes'], (old: any) => {
+        if (!old?.items) return old;
+        return {
+          ...old,
+          items: old.items.map((r: any) => ({
+            ...r,
+            is_primary: r.id === id,
+          })),
+        };
+      });
+
+      return { previous };
+    },
+
+    // On error, roll back to the snapshot
+    onError: (_err, _id, context: any) => {
+      queryClient.setQueryData(['resumes'], context?.previous);
+    },
+
+    // Always sync with server after mutation
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['resumes'] });
+    },
+  });
+
   const handleFileSelect = (file: File) => {
     const ext = file.name.split('.').pop()?.toLowerCase();
     if (!['pdf', 'docx'].includes(ext || '')) {
@@ -262,7 +299,7 @@ export default function ResumeManagerPage() {
                     key={resume.id}
                     resume={resume}
                     onDelete={(id: string) => deleteMutation.mutate(id)}
-                    onSetPrimary={() => {}} // Could implement PATCH /resumes/{id}
+                    onSetPrimary={(id: string) => setPrimaryMutation.mutate(id)}
                   />
                 ))}
               </div>

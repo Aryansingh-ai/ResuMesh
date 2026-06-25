@@ -79,7 +79,7 @@ async def analyze_job(
             detail="Job description is too short (minimum 50 characters).",
         )
 
-    # Create Job record
+    # Create Job record (scoped to current user)
     job = Job(
         title=body.title.strip(),
         company=body.company.strip(),
@@ -89,6 +89,7 @@ async def analyze_job(
         portal_job_id=body.portal_job_id,
         job_url=body.job_url,
         raw_description=body.raw_description,
+        user_id=current_user.id,
     )
     db.add(job)
     await db.flush()
@@ -149,8 +150,20 @@ async def list_jobs(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """List analyzed jobs with optional portal filter."""
-    query = select(Job).order_by(Job.created_at.desc()).offset(skip).limit(min(limit, 100))
+    """List analyzed jobs — scoped to the current user (plus legacy unowned jobs)."""
+    from sqlalchemy import or_
+    query = (
+        select(Job)
+        .where(
+            or_(
+                Job.user_id == current_user.id,
+                Job.user_id.is_(None),  # backward compat: jobs before migration
+            )
+        )
+        .order_by(Job.created_at.desc())
+        .offset(skip)
+        .limit(min(limit, 100))
+    )
     if portal:
         query = query.where(Job.portal == portal)
 

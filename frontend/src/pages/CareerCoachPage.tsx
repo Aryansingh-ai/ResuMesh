@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare, Send, User, Bot, RefreshCw, Zap } from 'lucide-react';
+import { MessageSquare, Send, User, Bot, RefreshCw, Zap, ChevronDown } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
+import { getLLMHeaders } from './SettingsPage';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -13,12 +14,12 @@ interface Message {
 }
 
 const STARTER_PROMPTS = [
-  'Why is my match score low?',
-  'What skills should I learn next?',
-  'How can I improve my resume?',
-  'What projects should I build to stand out?',
+  'Why is my match score low for this job?',
+  'What skills should I add for this role?',
+  'How can I improve my resume for this position?',
+  'What interview questions should I prepare?',
   'How do I negotiate a higher salary?',
-  'How do I prepare for a technical interview?',
+  'How does my experience compare to the job requirements?',
 ];
 
 export default function CareerCoachPage() {
@@ -26,16 +27,31 @@ export default function CareerCoachPage() {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: `Hello ${user?.full_name?.split(' ')[0] || 'there'}! 👋 I'm your AI Career Coach powered by ResuMesh.\n\nI can help you with:\n- **Resume optimization** and ATS tips\n- **Skill gap analysis** and learning roadmaps\n- **Interview preparation** strategies\n- **Career trajectory** planning\n\nWhat would you like to work on today?`,
+      content: `Hello ${user?.full_name?.split(' ')[0] || 'there'}! 👋 I'm your AI Career Coach powered by ResuMesh.\n\nSelect a **Resume** and **Job** above to get personalized advice — or just ask me anything!\n\nI can help you with:\n- **Resume optimization** and ATS tips\n- **Skill gap analysis** for specific roles\n- **Interview preparation** strategies\n- **Career trajectory** planning`,
       timestamp: new Date(),
     },
   ]);
   const [input, setInput] = useState('');
+  const [selectedResume, setSelectedResume] = useState('');
+  const [selectedJob, setSelectedJob] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  const { data: resumesData } = useQuery({
+    queryKey: ['resumes'],
+    queryFn: () => api.get('/resumes/').then((r) => r.data),
+  });
+
+  const { data: jobsData } = useQuery({
+    queryKey: ['jobs'],
+    queryFn: () => api.get('/jobs/').then((r) => r.data),
+  });
+
+  const resumes = resumesData?.items?.filter((r: any) => !r.is_deleted) || [];
+  const jobs = jobsData?.items || [];
 
   const chatMutation = useMutation({
     mutationFn: async (message: string) => {
@@ -43,10 +59,16 @@ export default function CareerCoachPage() {
         role: m.role,
         content: m.content,
       }));
-      return api.post('/rag/chat', {
-        message,
-        history,
-      }).then((r) => r.data);
+      return api.post(
+        '/rag/chat',
+        {
+          message,
+          history,
+          resume_id: selectedResume || undefined,
+          job_id: selectedJob || undefined,
+        },
+        { headers: getLLMHeaders() }
+      ).then((r) => r.data);
     },
     onSuccess: (data) => {
       setMessages((prev) => [
@@ -54,25 +76,18 @@ export default function CareerCoachPage() {
         { role: 'assistant', content: data.response, timestamp: new Date() },
       ]);
     },
-    onError: () => {
+    onError: (err: any) => {
+      const errMsg = err.response?.data?.detail || 'Sorry, I encountered an error. Please check your LLM settings.';
       setMessages((prev) => [
         ...prev,
-        {
-          role: 'assistant',
-          content: 'Sorry, I encountered an error. Please make sure your LLM service is running and try again.',
-          timestamp: new Date(),
-        },
+        { role: 'assistant', content: errMsg, timestamp: new Date() },
       ]);
     },
   });
 
   const sendMessage = (text: string) => {
     if (!text.trim() || chatMutation.isPending) return;
-    const userMessage: Message = {
-      role: 'user',
-      content: text.trim(),
-      timestamp: new Date(),
-    };
+    const userMessage: Message = { role: 'user', content: text.trim(), timestamp: new Date() };
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
     chatMutation.mutate(text.trim());
@@ -85,16 +100,21 @@ export default function CareerCoachPage() {
     }
   };
 
+  const selectedResumeLabel = resumes.find((r: any) => r.id === selectedResume)?.title || 'All resumes';
+  const selectedJobLabel = jobs.find((j: any) => j.id === selectedJob)
+    ? `${jobs.find((j: any) => j.id === selectedJob).title} @ ${jobs.find((j: any) => j.id === selectedJob).company}`
+    : 'No job selected';
+
   return (
     <div className="page-container h-full flex flex-col" style={{ maxHeight: 'calc(100vh - 56px)' }}>
       {/* Header */}
-      <div className="page-header mb-4">
-        <div className="flex items-center justify-between">
+      <div className="page-header mb-3">
+        <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="page-title flex items-center gap-2">
               <MessageSquare size={22} className="text-brand-400" /> Career Coach AI
             </h1>
-            <p className="page-subtitle">Powered by LangGraph + RAG · Personalized to your resume</p>
+            <p className="page-subtitle">Select a resume and job for personalized advice</p>
           </div>
           <button
             onClick={() => setMessages([{
@@ -109,8 +129,64 @@ export default function CareerCoachPage() {
         </div>
       </div>
 
+      {/* Context selectors */}
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <label className="label text-[11px] mb-1">Resume Context</label>
+          <div className="relative">
+            <select
+              value={selectedResume}
+              onChange={(e) => setSelectedResume(e.target.value)}
+              className="input text-sm pr-8 appearance-none"
+            >
+              <option value="" className="bg-slate-900">— All resumes —</option>
+              {resumes.map((r: any) => (
+                <option key={r.id} value={r.id} className="bg-slate-900">
+                  {r.title}{r.is_primary ? ' ★' : ''}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+          </div>
+        </div>
+        <div>
+          <label className="label text-[11px] mb-1">Job Context</label>
+          <div className="relative">
+            <select
+              value={selectedJob}
+              onChange={(e) => setSelectedJob(e.target.value)}
+              className="input text-sm pr-8 appearance-none"
+            >
+              <option value="" className="bg-slate-900">— No job selected —</option>
+              {jobs.map((j: any) => (
+                <option key={j.id} value={j.id} className="bg-slate-900">
+                  {j.title} @ {j.company}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+          </div>
+        </div>
+      </div>
+
+      {/* Active context pill */}
+      {(selectedResume || selectedJob) && (
+        <div className="flex flex-wrap gap-2 mb-3">
+          {selectedResume && (
+            <span className="text-[11px] bg-brand-900/40 border border-brand-700/40 text-brand-300 px-2.5 py-1 rounded-full flex items-center gap-1.5">
+              📄 {selectedResumeLabel}
+            </span>
+          )}
+          {selectedJob && (
+            <span className="text-[11px] bg-purple-900/40 border border-purple-700/40 text-purple-300 px-2.5 py-1 rounded-full flex items-center gap-1.5">
+              💼 {selectedJobLabel}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto card p-4 mb-4 space-y-4">
+      <div className="flex-1 overflow-y-auto card p-4 mb-3 space-y-4">
         <AnimatePresence>
           {messages.map((msg, i) => (
             <motion.div
@@ -119,7 +195,6 @@ export default function CareerCoachPage() {
               animate={{ opacity: 1, y: 0 }}
               className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
             >
-              {/* Avatar */}
               <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                 msg.role === 'assistant'
                   ? 'bg-gradient-brand shadow-glow-sm'
@@ -130,17 +205,13 @@ export default function CareerCoachPage() {
                   : <User size={14} className="text-slate-400" />
                 }
               </div>
-
-              {/* Bubble */}
               <div className={`max-w-[78%] rounded-2xl px-4 py-3 ${
                 msg.role === 'user'
                   ? 'bg-brand-600 text-white rounded-tr-sm'
                   : 'bg-dark-700 border border-dark-600 text-slate-100 rounded-tl-sm'
               }`}>
                 {msg.role === 'assistant' ? (
-                  <ReactMarkdown
-                    className="prose prose-invert prose-sm max-w-none prose-p:my-1 prose-li:my-0.5"
-                  >
+                  <ReactMarkdown className="prose prose-invert prose-sm max-w-none prose-p:my-1 prose-li:my-0.5">
                     {msg.content}
                   </ReactMarkdown>
                 ) : (

@@ -51,30 +51,58 @@ class AgentState(TypedDict):
     final_response: Optional[str]
 
 
-def _get_llm():
-    """Get the configured LLM based on settings."""
-    provider = settings.LLM_PROVIDER.lower()
+def _get_llm(provider: Optional[str] = None, api_key: Optional[str] = None, model: Optional[str] = None):
+    """Get the configured LLM based on settings or per-request overrides."""
+    provider = (provider or settings.LLM_PROVIDER).lower()
+    api_key = api_key or ""
 
-    if provider == "groq" and settings.GROQ_API_KEY:
+    if provider == "groq":
+        key = api_key or settings.GROQ_API_KEY
+        if not key:
+            raise ValueError("Groq API key not configured. Add it in Settings.")
         from langchain_groq import ChatGroq
-        return ChatGroq(
-            model="llama-3.1-8b-instant",
-            api_key=settings.GROQ_API_KEY,
-            temperature=0.7,
-            max_tokens=2000,
-        )
-    elif provider == "gemini" and settings.GOOGLE_API_KEY:
+        return ChatGroq(model=model or "llama-3.1-8b-instant", api_key=key, temperature=0.7, max_tokens=2000)
+
+    elif provider == "gemini":
+        key = api_key or settings.GOOGLE_API_KEY
+        if not key:
+            raise ValueError("Google API key not configured. Add it in Settings.")
         from langchain_google_genai import ChatGoogleGenerativeAI
-        return ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",
-            google_api_key=settings.GOOGLE_API_KEY,
+        return ChatGoogleGenerativeAI(model=model or "gemini-1.5-flash", google_api_key=key, temperature=0.7)
+
+    elif provider == "openai":
+        if not api_key:
+            raise ValueError("OpenAI API key required. Add it in Settings.")
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(model=model or "gpt-4o-mini", api_key=api_key, temperature=0.7)
+
+    elif provider == "deepseek":
+        if not api_key:
+            raise ValueError("DeepSeek API key required. Add it in Settings.")
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(
+            model=model or "deepseek-chat",
+            api_key=api_key,
+            base_url="https://api.deepseek.com/v1",
             temperature=0.7,
         )
+
+    elif provider == "openrouter":
+        if not api_key:
+            raise ValueError("OpenRouter API key required. Add it in Settings.")
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(
+            model=model or "openai/gpt-4o-mini",
+            api_key=api_key,
+            base_url="https://openrouter.ai/api/v1",
+            temperature=0.7,
+        )
+
     else:
         # Default: Ollama (self-hosted, free)
         from langchain_ollama import ChatOllama
         return ChatOllama(
-            model=settings.OLLAMA_MODEL,
+            model=model or settings.OLLAMA_MODEL,
             base_url=settings.OLLAMA_BASE_URL,
             temperature=0.7,
         )
@@ -85,10 +113,20 @@ class RAGCareerCoach:
     LangGraph-based conversational career coach with RAG retrieval.
     """
 
-    def __init__(self, embedding_service=None):
+    def __init__(
+        self,
+        embedding_service=None,
+        llm_provider: Optional[str] = None,
+        llm_api_key: Optional[str] = None,
+        llm_model: Optional[str] = None,
+    ):
         self.embedding_service = embedding_service
         self._graph = None
         self._llm = None
+        self._llm_provider = llm_provider
+        self._llm_api_key = llm_api_key
+        self._llm_model = llm_model
+
 
     def _build_graph(self) -> StateGraph:
         """Build the LangGraph state machine."""
@@ -134,7 +172,11 @@ class RAGCareerCoach:
     async def _generate_node(self, state: AgentState) -> Dict[str, Any]:
         """Generate a response using the LLM with retrieved context."""
         if self._llm is None:
-            self._llm = _get_llm()
+            self._llm = _get_llm(
+                provider=self._llm_provider,
+                api_key=self._llm_api_key,
+                model=self._llm_model,
+            )
 
         # Build context
         user_context = state.get("user_context", "No user context available.")
