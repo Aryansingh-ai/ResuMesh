@@ -30,6 +30,12 @@ export default function CoverLetterPage() {
     queryFn: () => api.get('/jobs/').then((r) => r.data),
   });
 
+  // Jobs the user has actually matched/applied to (from Applications tracker)
+  const { data: applicationsData } = useQuery({
+    queryKey: ['applications'],
+    queryFn: () => api.get('/applications/').then((r) => r.data),
+  });
+
   const { data: savedLetters } = useQuery({
     queryKey: ['cover-letters'],
     queryFn: () => api.get('/coverletters/').then((r) => r.data),
@@ -57,7 +63,18 @@ export default function CoverLetterPage() {
   };
 
   const resumes = resumesData?.items?.filter((r: any) => r.is_parsed) || [];
-  const jobs = jobsData?.items || [];
+
+  // Jobs from Applications (matched jobs the user has already analyzed against their resume)
+  const applicationJobs: any[] = (applicationsData?.items || [])
+    .map((app: any) => app.job)
+    .filter(Boolean);
+  const applicationJobIds = new Set(applicationJobs.map((j: any) => j.id));
+
+  // All analyzed jobs (from /jobs/ endpoint)
+  const allAnalyzedJobs: any[] = jobsData?.items || [];
+
+  // Remaining jobs not already in applications
+  const otherJobs = allAnalyzedJobs.filter((j: any) => !applicationJobIds.has(j.id));
 
   return (
     <div className="page-container">
@@ -89,12 +106,31 @@ export default function CoverLetterPage() {
           <div>
             <label className="label">Select Job</label>
             <select className="input" value={selectedJob} onChange={(e) => setSelectedJob(e.target.value)}>
-              <option value="" className="bg-slate-900 text-white">— Choose analyzed job —</option>
-              {jobs.map((j: any) => (
-                <option key={j.id} value={j.id} className="bg-slate-900 text-white">{j.title} @ {j.company}</option>
-              ))}
+              <option value="" className="bg-slate-900 text-white">— Choose a job —</option>
+
+              {/* Jobs from applications — shown first */}
+              {applicationJobs.length > 0 && (
+                <optgroup label="✅ Matched Jobs (from Applications)" style={{ color: '#a78bfa', background: '#0f0f17' }}>
+                  {applicationJobs.map((j: any) => (
+                    <option key={j.id} value={j.id} className="bg-slate-900 text-white">
+                      {j.title} @ {j.company}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+
+              {/* Other analyzed jobs not in applications */}
+              {otherJobs.length > 0 && (
+                <optgroup label="📋 All Analyzed Jobs" style={{ color: '#94a3b8', background: '#0f0f17' }}>
+                  {otherJobs.map((j: any) => (
+                    <option key={j.id} value={j.id} className="bg-slate-900 text-white">
+                      {j.title} @ {j.company}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </select>
-            {jobs.length === 0 && (
+            {applicationJobs.length === 0 && otherJobs.length === 0 && (
               <p className="text-xs text-yellow-400 mt-1">Analyze a job first to use it here.</p>
             )}
           </div>

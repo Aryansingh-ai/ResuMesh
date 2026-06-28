@@ -79,7 +79,7 @@ export default function LandingPage() {
           <nav className="hidden md:flex items-center gap-6">
             <a href="#features" className="text-slate-400 hover:text-white text-sm transition-colors">Features</a>
             <a href="#how-it-works" className="text-slate-400 hover:text-white text-sm transition-colors">How it works</a>
-            <a href="https://github.com/yourusername/resumesh" target="_blank" rel="noopener noreferrer"
+            <a href="https://github.com/Aryansingh-ai/ResuMesh" target="_blank" rel="noopener noreferrer"
               className="text-slate-400 hover:text-white text-sm transition-colors flex items-center gap-1">
               <Github size={14} /> GitHub
             </a>
@@ -127,7 +127,7 @@ export default function LandingPage() {
               <Link to="/register" className="btn-primary text-base py-3 px-8">
                 Start Free Today <ArrowRight size={18} />
               </Link>
-              <a href="https://github.com/yourusername/resumesh" target="_blank"
+              <a href="https://github.com/Aryansingh-ai/ResuMesh" target="_blank"
                 className="btn-secondary text-base py-3 px-8">
                 <Github size={18} /> View on GitHub
               </a>
@@ -262,7 +262,7 @@ export default function LandingPage() {
             <span className="text-slate-400 text-sm">ResuMesh — MIT License</span>
           </div>
           <div className="flex items-center gap-6 text-sm text-slate-500">
-            <a href="https://github.com/yourusername/resumesh" className="hover:text-white transition-colors">GitHub</a>
+            <a href="https://github.com/Aryansingh-ai/ResuMesh" className="hover:text-white transition-colors">GitHub</a>
             <a href="/docs" className="hover:text-white transition-colors">Docs</a>
             <span>Built with ❤️ for job seekers</span>
           </div>

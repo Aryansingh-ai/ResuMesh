@@ -147,27 +147,45 @@ export default function DashboardPage() {
             Application Pipeline
           </h2>
           {statusData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={220}>
-              <PieChart>
-                <Pie data={statusData} cx="50%" cy="50%" innerRadius={60} outerRadius={90}
-                  dataKey="value" nameKey="name" label={({ name, value }) => `${name}: ${value}`}
-                  labelLine={false}
-                >
-                  {statusData.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{ background: '#111118', border: '1px solid #1e1e2e', borderRadius: '8px', color: '#e2e8f0' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+            <div>
+              <ResponsiveContainer width="100%" height={180}>
+                <PieChart>
+                  <Pie
+                    data={statusData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={55}
+                    outerRadius={82}
+                    dataKey="value"
+                    nameKey="name"
+                    paddingAngle={2}
+                    isAnimationActive={true}
+                  >
+                    {statusData.map((entry, i) => (
+                      <Cell key={i} fill={entry.color} stroke="transparent" />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+              {/* Custom legend — always readable */}
+              <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-2 justify-center">
+                {statusData.map((entry) => (
+                  <div key={entry.name} className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: entry.color }} />
+                    <span className="text-xs text-slate-300">
+                      {entry.name}: <span className="font-semibold text-white">{entry.value}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
           ) : (
             <div className="h-48 flex items-center justify-center text-slate-500 text-sm">
               No applications yet. Start by analyzing a job!
             </div>
           )}
         </motion.div>
+
 
         {/* Missing Skills */}
         <motion.div

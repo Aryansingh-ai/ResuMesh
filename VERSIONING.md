@@ -6,7 +6,7 @@ This document details the design and implementation of the **Resume Versioning a
 
 To allow users to maintain multiple versions of their resume (e.g. V1, V2, V3) as they update their experience and skills, while ensuring that recruiters and the matching engine use their latest or designated primary resume by default.
 
----
+--
 
 ## 2. Database Schema Changes
 
