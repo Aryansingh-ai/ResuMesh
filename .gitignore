@@ -122,6 +122,13 @@ mlartifacts/
 .dvc/cache
 .dvc/tmp
 .dvc/plots
+/dvc-remote/
+
+# ── DVC Tracked Directories (managed by DVC, not Git) ─────────────────────────
+# These are tracked via .dvc files — do NOT gitignore *.dvc files
+datasets/sample_resumes/
+datasets/evaluation/
+artifacts/embeddings/
 
 # ── Uploads ────────────────────────────────────────────────────────────────────
 backend/uploads/

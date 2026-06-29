@@ -1,4 +1,20 @@
-version: "3.9"
+# =============================================================================
+# ResuMesh — Docker Compose Configuration
+# =============================================================================
+#
+# Usage:
+#   docker compose up --build              → Core services (postgres, redis, chromadb, backend, frontend)
+#   docker compose --profile ml up         → Core + MLflow + Airflow
+#   docker compose --profile llm up        → Core + Ollama
+#   docker compose --profile monitoring up → Core + Prometheus + Grafana
+#   docker compose --profile full up       → Everything
+#
+# Development mode (auto-loaded via docker-compose.override.yml):
+#   docker compose up --build              → Runs with hot reload, volume mounts
+#
+# Production mode (skip override):
+#   docker compose -f docker-compose.yml up --build
+# =============================================================================
 
 services:
   # ─────────────────────────────────────────────
@@ -24,6 +40,10 @@ services:
       retries: 5
     networks:
       - resumesh_net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   # ─────────────────────────────────────────────
   # Redis Cache
@@ -44,6 +64,10 @@ services:
       retries: 5
     networks:
       - resumesh_net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
   # ─────────────────────────────────────────────
   # ChromaDB Vector Database
@@ -68,6 +92,10 @@ services:
       retries: 5
     networks:
       - resumesh_net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   # ─────────────────────────────────────────────
   # FastAPI Backend
@@ -76,8 +104,13 @@ services:
     build:
       context: ./backend
       dockerfile: ../docker/Dockerfile.backend
+      target: production
+      args:
+        SENTENCE_TRANSFORMER_MODEL: ${SENTENCE_TRANSFORMER_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
     container_name: resumesh_backend
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
@@ -98,7 +131,6 @@ services:
       DEBUG: ${DEBUG:-false}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
     volumes:
-      - ./backend:/app
       - uploads_data:/app/uploads
       - ./models:/app/models
       - ./logs:/app/logs
@@ -115,9 +147,14 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
+      start_period: 40s
       retries: 5
     networks:
       - resumesh_net
+    deploy:
+      resources:
+        limits:
+          memory: 2G
 
   # ─────────────────────────────────────────────
   # React Frontend
@@ -126,17 +163,24 @@ services:
     build:
       context: ./frontend
       dockerfile: ../docker/Dockerfile.frontend
+      target: production
+      additional_contexts:
+        docker: ./docker
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+        VITE_APP_NAME: ${VITE_APP_NAME:-ResuMesh}
     container_name: resumesh_frontend
     restart: unless-stopped
-    environment:
-      VITE_API_URL: http://localhost:8000
-      VITE_APP_NAME: ResuMesh
     ports:
       - "3000:3000"
     depends_on:
       - backend
     networks:
       - resumesh_net
+    deploy:
+      resources:
+        limits:
+          memory: 128M
 
   # ─────────────────────────────────────────────
   # MLflow Tracking Server
@@ -145,6 +189,9 @@ services:
     image: ghcr.io/mlflow/mlflow:v2.11.3
     container_name: resumesh_mlflow
     restart: unless-stopped
+    profiles:
+      - ml
+      - full
     command: >
       mlflow server
       --host 0.0.0.0
@@ -160,6 +207,10 @@ services:
         condition: service_healthy
     networks:
       - resumesh_net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   # ─────────────────────────────────────────────
   # Apache Airflow
@@ -170,6 +221,9 @@ services:
       dockerfile: ../docker/Dockerfile.airflow
     container_name: resumesh_airflow_webserver
     restart: unless-stopped
+    profiles:
+      - ml
+      - full
     command: webserver
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
@@ -202,6 +256,9 @@ services:
       dockerfile: ../docker/Dockerfile.airflow
     container_name: resumesh_airflow_scheduler
     restart: unless-stopped
+    profiles:
+      - ml
+      - full
     command: scheduler
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
@@ -225,6 +282,9 @@ services:
     image: ollama/ollama:latest
     container_name: resumesh_ollama
     restart: unless-stopped
+    profiles:
+      - llm
+      - full
     volumes:
       - ollama_data:/root/.ollama
     ports:
@@ -239,6 +299,9 @@ services:
     image: prom/prometheus:latest
     container_name: resumesh_prometheus
     restart: unless-stopped
+    profiles:
+      - monitoring
+      - full
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
@@ -254,6 +317,10 @@ services:
       - "9090:9090"
     networks:
       - resumesh_net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   # ─────────────────────────────────────────────
   # Grafana Dashboards
@@ -262,6 +329,9 @@ services:
     image: grafana/grafana:latest
     container_name: resumesh_grafana
     restart: unless-stopped
+    profiles:
+      - monitoring
+      - full
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
@@ -277,6 +347,10 @@ services:
       - prometheus
     networks:
       - resumesh_net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
 # ─────────────────────────────────────────────
 # Volumes

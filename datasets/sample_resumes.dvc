@@ -1,0 +1,6 @@
+outs:
+- md5: 953f664c0aaae204db78837a05c64f86.dir
+  size: 44
+  nfiles: 1
+  hash: md5
+  path: sample_resumes

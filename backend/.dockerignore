@@ -1,0 +1,54 @@
+# ── Python ─────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# ── Virtual Environments ──────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── Testing ────────────────────────────────────────────
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# ── IDE ────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Git ────────────────────────────────────────────────
+.git/
+.gitignore
+
+# ── Docker ─────────────────────────────────────────────
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# ── Runtime Data ───────────────────────────────────────
+uploads/
+logs/
+chroma_db/
+*.db
+
+# ── Documentation ──────────────────────────────────────
+*.md
+LICENSE
+
+# ── Environment ───────────────────────────────────────
+.env
+.env.*
+
+# ── OS Files ──────────────────────────────────────────
+.DS_Store
+Thumbs.db

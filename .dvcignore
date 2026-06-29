@@ -1,0 +1,55 @@
+# =============================================================================
+# ResuMesh — DVC Ignore File
+# Tells DVC which files/directories to skip when tracking data
+# =============================================================================
+
+# ── Version Control ───────────────────────────────────
+.git/
+.gitignore
+.dvc/cache
+.dvc/tmp
+.dvc/plots
+
+# ── Dependencies & Virtual Environments ───────────────
+node_modules/
+.venv/
+venv/
+env/
+ENV/
+
+# ── Build Outputs ─────────────────────────────────────
+frontend/dist/
+frontend/.vite/
+backend/__pycache__/
+**/__pycache__/
+*.py[cod]
+*.so
+
+# ── Docker ────────────────────────────────────────────
+docker/
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+
+# ── IDE & OS ──────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Runtime Data ──────────────────────────────────────
+backend/uploads/
+backend/logs/
+logs/
+*.log
+
+# ── Secrets ───────────────────────────────────────────
+.env
+.env.*
+*.pem
+*.key
+*.cert
+secrets/

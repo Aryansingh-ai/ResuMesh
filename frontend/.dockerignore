@@ -1,0 +1,42 @@
+# ── Dependencies ───────────────────────────────────────
+node_modules/
+
+# ── Build Output ───────────────────────────────────────
+dist/
+.vite/
+
+# ── Testing ────────────────────────────────────────────
+coverage/
+
+# ── IDE ────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Git ────────────────────────────────────────────────
+.git/
+.gitignore
+
+# ── Docker ─────────────────────────────────────────────
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# ── Documentation ──────────────────────────────────────
+*.md
+LICENSE
+
+# ── Environment ───────────────────────────────────────
+.env
+.env.*
+.env.local
+.env.production
+
+# ── OS Files ──────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── TypeScript Build Info ─────────────────────────────
+*.tsbuildinfo
