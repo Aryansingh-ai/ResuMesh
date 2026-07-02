@@ -9,7 +9,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
-import structlog
+from loguru import logger
 import time
 
 from app.core.config import settings
@@ -20,7 +20,6 @@ from app.api.v1.router import api_router
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.middleware.request_logger import RequestLoggerMiddleware
 
-logger = structlog.get_logger(__name__)
 
 
 @asynccontextmanager
@@ -28,7 +27,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager — startup and shutdown."""
     # Startup
     setup_logging()
-    logger.info("Starting ResuMesh API", version=settings.APP_VERSION, env=settings.APP_ENV)
+    logger.bind(version=settings.APP_VERSION, env=settings.APP_ENV).info("Starting ResuMesh API")
 
     await init_db()
     logger.info("Database initialized")
@@ -37,16 +36,16 @@ async def lifespan(app: FastAPI):
         from app.services.supabase_storage import get_storage_service
         await get_storage_service().initialize_bucket("resumes")
     except Exception as e:
-        logger.warning("Failed to initialize Supabase storage bucket during startup.", error=str(e))
+        logger.bind(error=str(e).warning("Failed to initialize Supabase storage bucket during startup."))
 
     try:
         from app.services.embedding_service import get_embedding_service
         await get_embedding_service().initialize()
         logger.info("Embedding service initialized")
     except Exception as e:
-        logger.warning("Failed to initialize embedding service during startup. App will run in degraded mode.", error=str(e))
+        logger.bind(error=str(e).warning("Failed to initialize embedding service during startup. App will run in degraded mode."))
 
-    logger.info("ResuMesh API ready", host=settings.BACKEND_HOST, port=settings.BACKEND_PORT)
+    logger.bind(host=settings.BACKEND_HOST, port=settings.BACKEND_PORT).info("ResuMesh API ready")
     yield
 
     # Shutdown
@@ -92,9 +91,7 @@ def create_application() -> FastAPI:
     # ── Exception Handlers ──────────────────────────────────────────────────
     @app.exception_handler(Exception)
     async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-        logger.error(
-            "Unhandled exception",
-            path=str(request.url),
+        logger.bind(path=str(request.url).error("Unhandled exception"),
             method=request.method,
             error=str(exc),
             exc_info=True,
@@ -116,7 +113,7 @@ def create_application() -> FastAPI:
         try:
             await db.execute(text("SELECT 1"))
         except Exception as e:
-            logger.error("Database health check failed", error=str(e))
+            logger.bind(error=str(e).error("Database health check failed"))
             database_status = "disconnected"
             overall_status = "unhealthy"
 

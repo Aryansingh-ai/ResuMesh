@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
-import structlog
+from loguru import logger
 
 from app.core.database import get_db
 from app.core.security import get_current_user
@@ -20,7 +20,6 @@ from app.services.matching_engine import MatchingEngine
 from app.services.embedding_service import get_embedding_service
 
 router = APIRouter()
-logger = structlog.get_logger(__name__)
 
 
 class MatchRequest(BaseModel):
@@ -141,9 +140,7 @@ async def compute_match_score(
         await db.refresh(application)
         application_id = str(application.id)
 
-    logger.info(
-        "Match computed",
-        user_id=str(current_user.id),
+    logger.bind(user_id=str(current_user.id).info("Match computed"),
         resume_id=body.resume_id,
         job_id=body.job_id,
         score=match_result.score,

@@ -11,11 +11,10 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import text
-import structlog
+from loguru import logger
 
 from app.core.config import settings
 
-logger = structlog.get_logger(__name__)
 
 # ── Engine ────────────────────────────────────────────────────────────────────
 db_url = settings.DATABASE_URL

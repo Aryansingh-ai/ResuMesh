@@ -6,7 +6,7 @@ import uuid
 import httpx
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
-import structlog
+from loguru import logger
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi import HTTPException, status, Depends
@@ -16,7 +16,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_db
 
-logger = structlog.get_logger(__name__)
 
 # ── Password Hashing ──────────────────────────────────────────────────────────
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -59,7 +58,7 @@ def decode_token(token: str) -> Dict[str, Any]:
         payload = jwt.get_unverified_claims(token)
         return payload
     except Exception as e:
-        logger.warning("Unverified JWT decode failed", error=str(e))
+        logger.bind(error=str(e).warning("Unverified JWT decode failed"))
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
@@ -92,7 +91,7 @@ async def get_current_user(
         except HTTPException:
             raise
         except Exception as e:
-            logger.error("Failed to validate token with Supabase GoTrue", error=str(e))
+            logger.bind(error=str(e).error("Failed to validate token with Supabase GoTrue"))
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Authentication server connection error"

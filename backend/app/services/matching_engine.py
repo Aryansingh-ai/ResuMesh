@@ -10,12 +10,11 @@ import math
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
 import numpy as np
-import structlog
+from loguru import logger
 
 from app.core.config import settings
 from app.core.metrics import match_score_histogram
 
-logger = structlog.get_logger(__name__)
 
 
 @dataclass
@@ -70,7 +69,7 @@ class MatchingEngine:
                     raw_resume_text, raw_job_text
                 )
             except Exception as e:
-                logger.warning("Embedding similarity failed, using keyword only", error=str(e))
+                logger.bind(error=str(e).warning("Embedding similarity failed, using keyword only"))
 
         # Retrieve subscores from helper methods
         exp_score = self._compute_experience_score(parsed_resume, job_description)
@@ -144,10 +143,8 @@ class MatchingEngine:
             model_version=model_version,
         )
 
-        logger.info(
-            "Match computed",
-            score=final_score,
-            matched=len(result.matched_skills),
+        logger.bind(score=final_score,
+            matched=len(result.matched_skills).info("Match computed"),
             missing=len(result.missing_skills),
             version=model_version,
         )

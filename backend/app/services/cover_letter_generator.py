@@ -3,13 +3,12 @@ Cover Letter Generator — RAG-powered tailored cover letter generation.
 """
 
 from typing import Optional, List
-import structlog
+from loguru import logger
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from app.core.config import settings
 from app.core.metrics import cover_letter_generations_total
 
-logger = structlog.get_logger(__name__)
 
 COVER_LETTER_TEMPLATES = {
     "professional": """Generate a professional cover letter with the following structure:
@@ -163,9 +162,9 @@ Write ONLY the cover letter text. Do not include any preamble or explanation."""
             response = await llm.ainvoke(messages)
             cover_letter = response.content.strip()
             cover_letter_generations_total.labels(status="success").inc()
-            logger.info("Cover letter generated", tone=tone, words=len(cover_letter.split()))
+            logger.bind(tone=tone, words=len(cover_letter.split().info("Cover letter generated")))
             return cover_letter
         except Exception as e:
             cover_letter_generations_total.labels(status="error").inc()
-            logger.error("Cover letter generation failed", error=str(e))
+            logger.bind(error=str(e).error("Cover letter generation failed"))
             raise

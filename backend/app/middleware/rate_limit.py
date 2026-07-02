@@ -3,11 +3,10 @@
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
-import structlog
+from loguru import logger
 
 from app.core.config import settings
 
-logger = structlog.get_logger(__name__)
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -41,7 +40,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         entry["count"] += 1
 
         if entry["count"] > max_requests:
-            logger.warning("Rate limit exceeded", client_ip=client_ip, path=request.url.path)
+            logger.bind(client_ip=client_ip, path=request.url.path).warning("Rate limit exceeded")
             return JSONResponse(
                 status_code=429,
                 content={

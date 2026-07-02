@@ -6,9 +6,8 @@ from fastapi import FastAPI
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 from prometheus_fastapi_instrumentator import Instrumentator
 from starlette.responses import Response
-import structlog
+from loguru import logger
 
-logger = structlog.get_logger(__name__)
 
 # ── Custom Metrics ────────────────────────────────────────────────────────────
 resume_uploads_total = Counter(

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from typing import Optional
-import structlog
+from loguru import logger
 
 from app.core.database import get_db
 from app.core.security import get_current_user
@@ -14,7 +14,6 @@ from app.models.user import User
 from app.models.cover_letter import Feedback
 
 router = APIRouter()
-logger = structlog.get_logger(__name__)
 
 
 class FeedbackRequest(BaseModel):
@@ -53,6 +52,6 @@ async def submit_feedback(
     await db.commit()
 
     feedback_collected_total.labels(feedback_type=body.feedback_type).inc()
-    logger.info("Feedback submitted", type=body.feedback_type, user_id=str(current_user.id))
+    logger.bind(type=body.feedback_type, user_id=str(current_user.id).info("Feedback submitted"))
 
     return {"message": "Feedback recorded. Thank you!", "feedback_type": body.feedback_type}

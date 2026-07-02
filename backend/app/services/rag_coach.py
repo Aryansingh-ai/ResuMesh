@@ -5,7 +5,7 @@ Uses ChromaDB as the retrieval layer and a configurable LLM.
 
 from typing import Dict, Any, List, Optional, AsyncGenerator
 from dataclasses import dataclass, field
-import structlog
+from loguru import logger
 
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -16,7 +16,6 @@ from typing_extensions import Annotated, TypedDict
 from app.core.config import settings
 from app.core.metrics import rag_queries_total
 
-logger = structlog.get_logger(__name__)
 
 SYSTEM_PROMPT = """You are ResuMesh Career Coach — an expert AI assistant helping professionals 
 optimize their job applications, improve their resumes, and advance their careers.
@@ -165,7 +164,7 @@ class RAGCareerCoach:
                         retrieved_docs.append(f"[Job Context]: {item['document'][:500]}")
 
             except Exception as e:
-                logger.warning("RAG retrieval failed", error=str(e))
+                logger.bind(error=str(e).warning("RAG retrieval failed"))
 
         return {"retrieved_docs": retrieved_docs}
 
@@ -192,7 +191,7 @@ class RAGCareerCoach:
             response = await self._llm.ainvoke(messages)
             final_response = response.content
         except Exception as e:
-            logger.error("LLM generation failed", error=str(e))
+            logger.bind(error=str(e).error("LLM generation failed"))
             final_response = (
                 "I'm having trouble connecting to my AI backend right now. "
                 "Please check that your LLM service (Ollama/Groq/Gemini) is configured correctly."
@@ -246,6 +245,6 @@ class RAGCareerCoach:
             rag_queries_total.labels(status="success").inc()
             return response
         except Exception as e:
-            logger.error("RAG coach error", error=str(e), exc_info=True)
+            logger.bind(error=str(e).error("RAG coach error"), exc_info=True)
             rag_queries_total.labels(status="error").inc()
             raise

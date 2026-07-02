@@ -1,8 +1,7 @@
 import httpx
-import structlog
+from loguru import logger
 from app.core.config import settings
 
-logger = structlog.get_logger(__name__)
 
 class SupabaseStorageService:
     def __init__(self):
@@ -22,7 +21,7 @@ class SupabaseStorageService:
                     headers=self.headers
                 )
                 if resp.status_code == 200:
-                    logger.info("Supabase storage bucket verified", bucket=bucket)
+                    logger.bind(bucket=bucket).info("Supabase storage bucket verified")
                     return
                 
                 # If not found, create it
@@ -39,11 +38,11 @@ class SupabaseStorageService:
                     headers=self.headers
                 )
                 if resp_create.status_code in (200, 201):
-                    logger.info("Supabase storage bucket created successfully", bucket=bucket)
+                    logger.bind(bucket=bucket).info("Supabase storage bucket created successfully")
                 else:
-                    logger.warning("Failed to create storage bucket, might already exist", bucket=bucket, response=resp_create.text)
+                    logger.bind(bucket=bucket, response=resp_create.text).warning("Failed to create storage bucket, might already exist")
             except Exception as e:
-                logger.error("Error initializing storage bucket", error=str(e))
+                logger.bind(error=str(e).error("Error initializing storage bucket"))
 
     async def upload_file(self, bucket: str, path: str, content: bytes, content_type: str = "application/octet-stream") -> str:
         """Upload raw bytes to Supabase Storage."""
@@ -63,14 +62,14 @@ class SupabaseStorageService:
                     headers=headers
                 )
                 if resp_put.status_code == 200:
-                    logger.info("File updated in Supabase Storage", bucket=bucket, path=path)
+                    logger.bind(bucket=bucket, path=path).info("File updated in Supabase Storage")
                     return f"{bucket}/{path}"
                 raise Exception(f"Failed to overwrite file in Supabase Storage: {resp_put.text}")
                 
             if resp.status_code not in (200, 201):
                 raise Exception(f"Failed to upload to Supabase Storage: {resp.text}")
                 
-            logger.info("File uploaded to Supabase Storage", bucket=bucket, path=path)
+            logger.bind(bucket=bucket, path=path).info("File uploaded to Supabase Storage")
             return f"{bucket}/{path}"
 
     async def download_file(self, bucket: str, path: str) -> bytes:
@@ -92,9 +91,9 @@ class SupabaseStorageService:
                 headers=self.headers
             )
             if resp.status_code not in (200, 204):
-                logger.warning("Failed to delete file from Supabase Storage", bucket=bucket, path=path, response=resp.text)
+                logger.bind(bucket=bucket, path=path, response=resp.text).warning("Failed to delete file from Supabase Storage")
             else:
-                logger.info("File deleted from Supabase Storage", bucket=bucket, path=path)
+                logger.bind(bucket=bucket, path=path).info("File deleted from Supabase Storage")
 
 _storage_service = None
 

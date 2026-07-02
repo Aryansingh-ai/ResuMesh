@@ -1,51 +1,75 @@
 """
-Structured logging configuration using structlog + python-json-logger.
+Production-ready structured logging configuration using loguru.
 """
 
 import logging
-import logging.config
 import sys
-import structlog
+from pathlib import Path
+from loguru import logger
 from app.core.config import settings
 
+class InterceptHandler(logging.Handler):
+    """
+    Intercept standard logging messages toward Loguru sinks.
+    See: https://loguru.readthedocs.io/en/stable/overview.html#entirely-compatible-with-standard-logging
+    """
+    def emit(self, record: logging.LogRecord) -> None:
+        # Get corresponding Loguru level if it exists
+        try:
+            level = logger.level(record.levelname).name
+        except ValueError:
+            level = record.levelno
+
+        # Find caller from where originated the logged message
+        frame, depth = logging.currentframe(), 2
+        while frame.f_code.co_filename == logging.__file__:
+            frame = frame.f_back
+            depth += 1
+
+        logger.opt(depth=depth, exception=record.exc_info).log(
+            level, record.getMessage()
+        )
 
 def setup_logging() -> None:
-    """Configure structlog with JSON output for production, pretty output for dev."""
-    shared_processors = [
-        structlog.contextvars.merge_contextvars,
-        structlog.stdlib.add_logger_name,
-        structlog.stdlib.add_log_level,
-        structlog.stdlib.PositionalArgumentsFormatter(),
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.StackInfoRenderer(),
-    ]
+    """Configure Loguru for console and file logging."""
+    
+    # Remove default loguru handler
+    logger.remove()
 
-    if settings.APP_ENV == "production":
-        renderer = structlog.processors.JSONRenderer()
-    else:
-        renderer = structlog.dev.ConsoleRenderer(colors=True)
+    # Define log format
+    # Example: 2026-06-29 18:00:12 | INFO | User uploaded resume
+    log_format = "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}"
 
-    structlog.configure(
-        processors=shared_processors + [
-            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
-        ],
-        logger_factory=structlog.stdlib.LoggerFactory(),
-        wrapper_class=structlog.stdlib.BoundLogger,
-        cache_logger_on_first_use=True,
+    log_level = "DEBUG" if settings.DEBUG else "INFO"
+
+    # 1. Console Logging
+    logger.add(
+        sys.stdout,
+        format=log_format,
+        level=log_level,
+        colorize=True,
     )
 
-    formatter = structlog.stdlib.ProcessorFormatter(
-        processor=renderer,
-        foreign_pre_chain=shared_processors,
+    # 2. File Logging
+    # Ensure logs directory exists
+    log_dir = Path("logs")
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    logger.add(
+        str(log_dir / "resumesh_{time}.log"),
+        format=log_format,
+        level=log_level,
+        rotation="500 MB",       # Rotate when file reaches 500MB
+        retention="10 days",     # Keep logs for 10 days
+        compression="zip",       # Zip rotated logs
+        enqueue=True,            # Thread-safe async logging
     )
 
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(formatter)
+    # Intercept standard library logging (e.g., Uvicorn, FastAPI, SQLAlchemy)
+    logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
 
-    root_logger = logging.getLogger()
-    root_logger.addHandler(handler)
-    root_logger.setLevel(logging.DEBUG if settings.DEBUG else logging.INFO)
+    # Suppress noisy loggers from standard library
+    for noisy_logger in ["uvicorn.access", "sqlalchemy.engine", "httpx"]:
+        logging.getLogger(noisy_logger).setLevel(logging.WARNING)
 
-    # Suppress noisy loggers
-    for noisy in ["uvicorn.access", "sqlalchemy.engine"]:
-        logging.getLogger(noisy).setLevel(logging.WARNING)
+    logger.info("Logging configured successfully.")

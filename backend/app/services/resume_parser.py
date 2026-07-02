@@ -7,13 +7,12 @@ import re
 import json
 from pathlib import Path
 from typing import Optional, Dict, Any, List
-import structlog
+from loguru import logger
 
 import fitz  # PyMuPDF
 import pdfplumber
 from docx import Document
 
-logger = structlog.get_logger(__name__)
 
 # ── Skill Keywords (extensible) ───────────────────────────────────────────────
 PROGRAMMING_SKILLS = {
@@ -81,7 +80,7 @@ class ResumeParser:
         else:
             raise ValueError(f"Unsupported file type: {file_type}")
 
-        logger.info("Resume text extracted", chars=len(raw_text), file_type=file_type)
+        logger.bind(chars=len(raw_text).info("Resume text extracted"), file_type=file_type)
         return self._parse_text(raw_text)
 
     # ── Text Extraction ────────────────────────────────────────────────────────
@@ -97,7 +96,7 @@ class ResumeParser:
             if len(text) > 100:
                 return text
         except Exception as e:
-            logger.warning("PyMuPDF extraction failed, trying pdfplumber", error=str(e))
+            logger.bind(error=str(e).warning("PyMuPDF extraction failed, trying pdfplumber"))
 
         # Fallback to pdfplumber
         try:

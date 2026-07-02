@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
-import structlog
+from loguru import logger
 
 from app.core.database import get_db
 from app.core.security import get_current_user
@@ -19,7 +19,6 @@ from app.services.job_extractor import JobDescriptionExtractor
 from app.services.embedding_service import get_embedding_service
 
 router = APIRouter()
-logger = structlog.get_logger(__name__)
 
 
 class JobAnalyzeRequest(BaseModel):
@@ -58,7 +57,7 @@ async def _index_job_background(job_id: str, text: str) -> None:
                 metadata={"job_id": job_id},
             )
     except Exception as e:
-        logger.warning("Failed to index job embedding", job_id=job_id, error=str(e))
+        logger.bind(job_id=job_id, error=str(e).warning("Failed to index job embedding"))
 
 
 @router.post("/analyze", status_code=status.HTTP_201_CREATED)
@@ -123,7 +122,7 @@ async def analyze_job(
     background_tasks.add_task(_index_job_background, str(job.id), body.raw_description)
 
     job_analyses_total.labels(portal=body.portal, status="success").inc()
-    logger.info("Job analyzed", job_id=str(job.id), portal=body.portal)
+    logger.bind(job_id=str(job.id).info("Job analyzed"), portal=body.portal)
 
     return {
         "id": str(job.id),
@@ -252,7 +251,7 @@ async def match_job(
             job.embedding = await embedding_service.encode(job.raw_description)
             await db.commit()
         except Exception as e:
-            logger.error("Failed to generate job embedding for matching", job_id=job_id, error=str(e))
+            logger.bind(job_id=job_id, error=str(e).error("Failed to generate job embedding for matching"))
             raise HTTPException(status_code=500, detail="Failed to generate job embedding")
 
     from app.services.matching_service import MatchingService

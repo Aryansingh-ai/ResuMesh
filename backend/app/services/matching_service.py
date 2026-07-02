@@ -1,12 +1,11 @@
 import uuid
-import structlog
+from loguru import logger
 from typing import List, Dict, Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.postgres_models import Embedding, ParsedResume, Job, Resume, JobDescription
 from app.services.embedding_service import get_embedding_service
 
-logger = structlog.get_logger(__name__)
 
 class MatchingService:
     def __init__(self, db: AsyncSession):
@@ -24,7 +23,7 @@ class MatchingService:
         res = await self.db.execute(select(Job).where(Job.id == uuid.UUID(job_id)))
         job = res.scalar_one_or_none()
         if not job or job.embedding is None:
-            logger.warning("Job or job embedding not found", job_id=job_id)
+            logger.bind(job_id=job_id).warning("Job or job embedding not found")
             return []
 
         query_embedding = job.embedding
@@ -226,7 +225,7 @@ class MatchingService:
             })
             
         candidates.sort(key=lambda x: x["score"], reverse=True)
-        logger.info("Hybrid candidates match complete", job_id=job_id, count=len(candidates))
+        logger.bind(job_id=job_id, count=len(candidates).info("Hybrid candidates match complete"))
         return candidates[:limit]
 
     async def match_by_text(self, text: str, limit: int = 20) -> List[Dict[str, Any]]:

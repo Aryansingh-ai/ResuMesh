@@ -4,9 +4,8 @@ Job Description Intelligence — Extracts structured data from raw job postings.
 
 import re
 from typing import Dict, Any, List, Optional, Tuple
-import structlog
+from loguru import logger
 
-logger = structlog.get_logger(__name__)
 
 # ── Skill keyword sets (shared with resume parser) ───────────────────────────
 TECH_SKILLS = {
@@ -86,9 +85,7 @@ class JobDescriptionExtractor:
             "max_years_experience": max_exp,
         }
 
-        logger.debug(
-            "Job description extracted",
-            required_skills_count=len(required_skills),
+        logger.bind(required_skills_count=len(required_skills).debug("Job description extracted"),
             preferred_skills_count=len(preferred_skills),
         )
         return result

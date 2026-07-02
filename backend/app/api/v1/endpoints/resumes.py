@@ -15,7 +15,7 @@ from fastapi import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
-import structlog
+from loguru import logger
 
 from app.core.database import get_db
 from app.core.security import get_current_user
@@ -27,7 +27,6 @@ from app.services.embedding_service import get_embedding_service
 from app.services.supabase_storage import get_storage_service
 
 router = APIRouter()
-logger = structlog.get_logger(__name__)
 
 
 async def _process_resume_background(
@@ -87,13 +86,13 @@ async def _process_resume_background(
                     metadata={"user_id": user_id, "resume_id": resume_id},
                 )
             except Exception as e:
-                logger.warning("Failed to index resume embedding in pgvector", error=str(e))
+                logger.bind(error=str(e).warning("Failed to index resume embedding in pgvector"))
 
             await db.commit()
-            logger.info("Resume background processing complete", resume_id=resume_id)
+            logger.bind(resume_id=resume_id).info("Resume background processing complete")
 
         except Exception as e:
-            logger.error("Resume background processing failed", resume_id=resume_id, error=str(e))
+            logger.bind(resume_id=resume_id, error=str(e).error("Resume background processing failed"))
         finally:
             if temp_path and os.path.exists(temp_path):
                 try:
@@ -142,7 +141,7 @@ async def upload_resume(
     )
     duplicate_resume = dup_result.scalar_one_or_none()
     if duplicate_resume:
-        logger.info("Duplicate resume uploaded, returning existing resume", resume_id=str(duplicate_resume.id), user_id=str(current_user.id))
+        logger.bind(resume_id=str(duplicate_resume.id).info("Duplicate resume uploaded, returning existing resume"), user_id=str(current_user.id))
         return {
             "id": str(duplicate_resume.id),
             "title": duplicate_resume.title,
@@ -181,7 +180,7 @@ async def upload_resume(
             content_type=file.content_type or "application/octet-stream"
         )
     except Exception as e:
-        logger.error("Failed to upload file to Supabase Storage", error=str(e))
+        logger.bind(error=str(e).error("Failed to upload file to Supabase Storage"))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to save file to Supabase cloud storage: {str(e)}"
@@ -225,7 +224,7 @@ async def upload_resume(
     await db.refresh(resume)
 
     resume_uploads_total.labels(status="success").inc()
-    logger.info("Resume uploaded successfully to Supabase", resume_id=str(resume.id), user_id=str(current_user.id), version=resume.version)
+    logger.bind(resume_id=str(resume.id).info("Resume uploaded successfully to Supabase"), user_id=str(current_user.id), version=resume.version)
 
     return {
         "id": str(resume.id),
@@ -376,11 +375,11 @@ async def delete_resume(
             storage_service = get_storage_service()
             await storage_service.delete_file("resumes", resume.storage_path)
         except Exception as e:
-            logger.warning("Failed to delete resume file from Supabase Storage during permanent purge", error=str(e))
+            logger.bind(error=str(e).warning("Failed to delete resume file from Supabase Storage during permanent purge"))
 
         await db.delete(resume)
         await db.commit()
-        logger.info("Resume permanently deleted", resume_id=resume_id, user_id=str(current_user.id))
+        logger.bind(resume_id=resume_id, user_id=str(current_user.id).info("Resume permanently deleted"))
     else:
         # Soft delete: update flags
         resume.is_deleted = True
@@ -403,7 +402,7 @@ async def delete_resume(
                 latest_active.is_primary = True
 
         await db.commit()
-        logger.info("Resume soft deleted", resume_id=resume_id, user_id=str(current_user.id))
+        logger.bind(resume_id=resume_id, user_id=str(current_user.id).info("Resume soft deleted"))
 
 
 @router.post("/{resume_id}/restore")
@@ -453,7 +452,7 @@ async def restore_resume(
 
     await db.commit()
     await db.refresh(resume)
-    logger.info("Resume restored", resume_id=resume_id, user_id=str(current_user.id))
+    logger.bind(resume_id=resume_id, user_id=str(current_user.id).info("Resume restored"))
 
     return {
         "id": str(resume.id),
@@ -499,7 +498,7 @@ async def set_primary_resume(
     resume.is_primary = True
     await db.commit()
     await db.refresh(resume)
-    logger.info("Primary resume updated", resume_id=resume_id, user_id=str(resume.user_id))
+    logger.bind(resume_id=resume_id, user_id=str(resume.user_id).info("Primary resume updated"))
 
     return {
         "id": str(resume.id),

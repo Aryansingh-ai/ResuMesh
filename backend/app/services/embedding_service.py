@@ -2,12 +2,11 @@ import asyncio
 import uuid
 import hashlib
 from typing import List, Dict, Any, Optional
-import structlog
+from loguru import logger
 import numpy as np
 
 from app.core.config import settings
 
-logger = structlog.get_logger(__name__)
 
 class EmbeddingService:
     _instance: Optional["EmbeddingService"] = None
@@ -23,7 +22,7 @@ class EmbeddingService:
 
     async def initialize(self) -> None:
         """Initialize sentence-transformers model (mocked for offline compatibility)."""
-        logger.info("Mock loading sentence transformer model", model=settings.SENTENCE_TRANSFORMER_MODEL)
+        logger.bind(model=settings.SENTENCE_TRANSFORMER_MODEL).info("Mock loading sentence transformer model")
         self._model = "MOCK_MODEL"
         logger.info("Sentence transformer model mock-loaded successfully")
 
@@ -88,7 +87,7 @@ class EmbeddingService:
                 session.add(record)
             await session.commit()
             
-        logger.info("Resume indexed in Supabase PostgreSQL (pgvector)", doc_id=doc_id)
+        logger.bind(doc_id=doc_id).info("Resume indexed in Supabase PostgreSQL (pgvector)")
         return doc_id
 
     async def index_job(self, doc_id: str, text: str, metadata: Dict[str, Any]) -> str:
@@ -110,7 +109,7 @@ class EmbeddingService:
                     record.description = text
             await session.commit()
             
-        logger.info("Job indexed in Supabase PostgreSQL (pgvector)", doc_id=doc_id)
+        logger.bind(doc_id=doc_id).info("Job indexed in Supabase PostgreSQL (pgvector)")
         return doc_id
 
     async def delete_document(self, collection_type: str, doc_id: str) -> None:
@@ -137,7 +136,7 @@ class EmbeddingService:
                     record.embedding = None
             await session.commit()
             
-        logger.info("Document deleted from pgvector storage", doc_id=doc_id, collection=collection_type)
+        logger.bind(doc_id=doc_id, collection=collection_type).info("Document deleted from pgvector storage")
 
 def get_embedding_service() -> EmbeddingService:
     return EmbeddingService.get_instance()

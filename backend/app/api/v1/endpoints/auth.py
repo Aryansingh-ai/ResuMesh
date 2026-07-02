@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, EmailStr, field_validator
-import structlog
+from loguru import logger
 
 from app.core.database import get_db
 from app.core.security import get_current_user
@@ -16,7 +16,6 @@ from app.core.config import settings
 from app.models.postgres_models import User
 
 router = APIRouter()
-logger = structlog.get_logger(__name__)
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -122,7 +121,7 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
             await db.commit()
             await db.refresh(user)
 
-        logger.info("User registered via Supabase Auth", user_id=user_id)
+        logger.bind(user_id=user_id).info("User registered via Supabase Auth")
         return TokenResponse(
             access_token=access_token,
             refresh_token=refresh_token,
@@ -178,7 +177,7 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
             await db.commit()
             await db.refresh(user)
 
-        logger.info("User logged in via Supabase Auth", user_id=user_id)
+        logger.bind(user_id=user_id).info("User logged in via Supabase Auth")
         return TokenResponse(
             access_token=access_token,
             refresh_token=refresh_token,
